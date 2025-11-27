@@ -11,17 +11,18 @@ const ResponsePage = ({ data, onBack }) => {
             </div>
         );
     }
+      delete submittedData.submittedAt;
 
     return (
         <div style={{ padding: 40, maxWidth: 600, margin: "0 auto", fontFamily: "Arial" }}>
 
             <div style={{ textAlign: "center", marginBottom: 30 }}>
-                <h1 style={{ color: "green" }}>Form Submitted Successfully!</h1>
+                <h1 style={{ color: "#140353ff" }}>Form Submitted Successfully!</h1>
                 <p style={{ color: "#666" }}>Thank you for your submission</p>
             </div>
 
             <div style={{ background: "#f5f5f5", padding: 25, borderRadius: 8 }}>
-                <h2 style={{ marginTop: 0, color: "#333", borderBottom: "2px solid #4CAF50", paddingBottom: 10 }}>
+                <h2 style={{ marginTop: 0, color: "#333", borderBottom: "2px solid #140353ff", paddingBottom: 10 }}>
                     Submitted Information
                 </h2>
 
@@ -44,7 +45,7 @@ const ResponsePage = ({ data, onBack }) => {
                         style={{
                             padding: "10px 25px",
                             marginRight: 10,
-                            background: "#4CAF50",
+                            background: "#140353ff",
                             color: "white",
                             border: "none",
                             borderRadius: 5,

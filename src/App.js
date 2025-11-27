@@ -85,7 +85,7 @@ const Registration = () => {
     }
 
     return (
-        
+
         <div style={{
             minHeight: '100vh',
             backgroundColor: '#f5f5f5',
@@ -130,8 +130,7 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+
                         />
                     </div>
 
@@ -153,8 +152,6 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
                         />
                     </div>
 
@@ -175,8 +172,7 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+
                         />
                     </div>
 
@@ -198,8 +194,7 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+
                         />
                     </div>
 
@@ -220,8 +215,7 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+
                         />
                     </div>
 
@@ -242,8 +236,7 @@ const Registration = () => {
                                 outline: 'none',
                                 transition: 'border-color 0.3s'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-                            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+
                         />
                     </div>
 
@@ -270,19 +263,11 @@ const Registration = () => {
                             fontSize: '16px',
                             fontWeight: '600',
                             color: '#ffffff',
-                            backgroundColor: loading ? '#81c784' : '#4CAF50',
+                            backgroundColor: loading ? '#392e62ff' : '#140353ff',
                             border: 'none',
                             borderRadius: '5px',
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            transition: 'background-color 0.3s',
-                            boxShadow: '0 2px 5px rgba(76, 175, 80, 0.3)'
                         }}
-                        onMouseEnter={(e) => {
-                            if (!loading) e.target.style.backgroundColor = '#45a049';
-                        }}
-                        onMouseLeave={(e) => {
-                            if (!loading) e.target.style.backgroundColor = '#4CAF50';
-                        }}
+
                     >
                         {loading ? "Submitting..." : "Submit"}
                     </button>

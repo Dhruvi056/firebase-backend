@@ -6,7 +6,7 @@ export default function Home() {
   const [selectedForm, setSelectedForm] = useState(null);
 
   return (
-    <div className="w-full h-full bg-[#f4f5f7] flex gap-6 p-6 overflow-hidden">
+    <div className="w-full h-screen bg-[#f4f5f7] flex gap-6 p-6 overflow-hidden">
       <Sidebar onSelectForm={setSelectedForm} selectedForm={selectedForm} />
       <FormDetails form={selectedForm} />
     </div>

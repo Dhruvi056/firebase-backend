@@ -36,7 +36,7 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
         <button
           onClick={() => onSelectForm(null)}
           className={`mt-4 w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors ${homeActive
-            ? "bg-purple-500 text-black shadow"
+            ? "bg-blue-500 text-black shadow"
             : "text-gray-800 hover:bg-gray-200"
             }`}
         >
@@ -66,7 +66,7 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
                     key={f.formId}
                     onClick={() => onSelectForm(f)}
                     className={`text-left text-sm px-3 py-2 rounded-xl transition-colors ${isSelected
-                      ? "bg-gray-900 text-black"
+                      ? "bg-gray-300 text-black"
                       : "text-gray-700 hover:bg-gray-100"
                       }`}
                   >

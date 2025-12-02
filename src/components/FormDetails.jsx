@@ -16,7 +16,7 @@ export default function FormDetails({ form }) {
       const list = snap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-        submittedAt: doc.data().submittedAt?.toDate().toLocaleString(),
+        submittedAt: doc.data().submittedAt?.toDate()?.toLocaleString() || "N/A",
       }));
       setSubmissions(list);
     });

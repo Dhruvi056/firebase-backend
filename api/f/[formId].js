@@ -1,5 +1,21 @@
-import { db } from "../../src/firebase.js";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import admin from "firebase-admin";
+
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    });
+  } catch (error) {
+    console.error("Firebase Admin initialization error", error);
+  }
+}
+
+const db = admin.firestore();
 
 export default async function handler(req, res) {
   // Prevent browser GET redirect
@@ -27,12 +43,16 @@ export default async function handler(req, res) {
 
     formData.split("&").forEach((pair) => {
       const [key, value] = pair.split("=");
-      body[decodeURIComponent(key)] = decodeURIComponent(value || "");
+      if (key) {
+        body[decodeURIComponent(key)] = decodeURIComponent(value || "");
+      }
     });
 
-    await setDoc(doc(collection(db, `forms/${formId}/submissions`)), {
+    // Use Firebase Admin SDK to write to Firestore
+    const submissionsRef = db.collection(`forms/${formId}/submissions`);
+    await submissionsRef.add({
       data: body,
-      submittedAt: serverTimestamp(),
+      submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return res.status(200).json({
@@ -42,7 +62,10 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Server error" });
+    console.error("Error submitting form:", e);
+    return res.status(500).json({ 
+      error: "Server error",
+      message: e.message 
+    });
   }
 }

@@ -1,6 +1,6 @@
 import { collection, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { db } from "../firebase";
+import { db } from "../firebase.js";
 import AddFormPopup from "./AddFormPopup.jsx";
 
 export default function Sidebar({ onSelectForm, selectedForm }) {

@@ -1,6 +1,6 @@
 // src/components/FormDetails.jsx
 import { useState, useEffect } from "react";
-import { db } from "../firebase";
+import { db } from "../firebase.js";
 import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
 
 export default function FormDetails({ form }) {

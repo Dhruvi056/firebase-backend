@@ -165,46 +165,63 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get request body - Handle Vercel's request format
+    // Get request body - Vercel serverless functions need special handling
     const contentType = req.headers["content-type"] || "";
     let formData = {};
+    let rawBody = "";
     
     console.log("=== Form Submission Debug ===");
     console.log("Method:", req.method);
     console.log("Content-Type:", contentType);
     console.log("FormId:", formId);
     console.log("req.body type:", typeof req.body);
-    console.log("req.body:", JSON.stringify(req.body, null, 2));
-    console.log("req.headers:", JSON.stringify(req.headers, null, 2));
+    console.log("req.body exists:", req.body !== undefined);
     
-    // Vercel provides req.body, but it might be undefined, a string, or already parsed
+    // Vercel may provide req.body as a parsed object, string, or undefined
+    // For form-urlencoded, Vercel sometimes doesn't parse it automatically
     if (req.body !== undefined && req.body !== null) {
-      if (typeof req.body === "object" && !Buffer.isBuffer(req.body) && !Array.isArray(req.body)) {
+      if (typeof req.body === "object" && !Buffer.isBuffer(req.body) && !Array.isArray(req.body) && Object.keys(req.body).length > 0) {
         // Already parsed object (Vercel parsed it)
         formData = req.body;
-        console.log("✓ Using parsed req.body object");
+        console.log("✓ Using parsed req.body object:", formData);
       } else if (typeof req.body === "string") {
-        // String body - need to parse
-        console.log("✓ Parsing string body");
-        formData = parseFormData(req.body, contentType);
+        // String body - parse it
+        rawBody = req.body;
+        console.log("✓ Got string body, length:", rawBody.length);
+        formData = parseFormData(rawBody, contentType);
+        console.log("✓ Parsed formData:", formData);
       } else if (Buffer.isBuffer(req.body)) {
         // Buffer - convert to string and parse
-        console.log("✓ Parsing buffer body");
-        formData = parseFormData(req.body.toString(), contentType);
+        rawBody = req.body.toString();
+        console.log("✓ Got buffer body, length:", rawBody.length);
+        formData = parseFormData(rawBody, contentType);
+        console.log("✓ Parsed formData:", formData);
       }
     }
     
-    // If still no data, the body might be empty or not provided
+    // If still no data, return detailed error
     if (!formData || Object.keys(formData).length === 0) {
-      console.log("⚠ No data found in req.body");
-      console.log("Attempting to read raw body...");
+      console.log("⚠ Body is empty or could not be parsed");
+      console.log("Request details:", {
+        method: req.method,
+        contentType,
+        bodyType: typeof req.body,
+        bodyExists: req.body !== undefined,
+        bodyValue: req.body,
+        url: req.url,
+        headers: Object.keys(req.headers)
+      });
       
-      // For Vercel, sometimes we need to handle it differently
-      // Try to get body from request if available
-      if (req.body && typeof req.body === "string" && req.body.length > 0) {
-        formData = parseFormData(req.body, contentType);
-        console.log("✓ Parsed from string body:", formData);
-      }
+      return res.status(400).json({ 
+        error: "No form data received",
+        hint: "Make sure your form has name attributes on all inputs and is submitting as application/x-www-form-urlencoded",
+        debug: {
+          contentType,
+          bodyType: typeof req.body,
+          bodyExists: req.body !== undefined,
+          bodyPreview: typeof req.body === "string" ? req.body.substring(0, 100) : String(req.body).substring(0, 100)
+        }
+      });
     }
 
     console.log("Final formData:", JSON.stringify(formData, null, 2));

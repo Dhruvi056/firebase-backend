@@ -79,39 +79,102 @@ app.use((req, res, next) => {
 app.post("/api/f/:formId", async (req, res) => {
   const { formId } = req.params;
 
+  console.log("\n=== Form Submission Debug (Local) ===");
+  console.log("Method:", req.method);
+  console.log("FormId:", formId);
+  console.log("Content-Type:", req.headers["content-type"]);
+  console.log("req.body:", JSON.stringify(req.body, null, 2));
+  console.log("req.body type:", typeof req.body);
+  console.log("req.body keys:", Object.keys(req.body || {}));
+
   if (!formId)
     return res.status(400).json({ error: "Missing Form ID" });
 
-  if (!db)
+  if (!db) {
+    console.error("❌ Firebase not initialized");
     return res.status(500).json({ error: "Firebase not initialized" });
+  }
 
   try {
     const cleanData = {};
 
-    Object.keys(req.body).forEach((key) => {
-      if (key !== "_gotcha" && req.body[key] !== "") {
+    // Log all body data
+    console.log("Processing form data...");
+    console.log("Raw req.body:", req.body);
+
+    Object.keys(req.body || {}).forEach((key) => {
+      if (key !== "_gotcha" && req.body[key] !== "" && req.body[key] !== undefined && req.body[key] !== null) {
         cleanData[key] = req.body[key];
+        console.log(`  - ${key}: ${req.body[key]}`);
       }
     });
 
-    await db
+    console.log("Clean data to save:", JSON.stringify(cleanData, null, 2));
+
+    if (Object.keys(cleanData).length === 0) {
+      console.error("❌ No data to save after cleaning");
+      return res.status(400).json({ 
+        error: "No form data received",
+        debug: {
+          bodyType: typeof req.body,
+          bodyKeys: Object.keys(req.body || {}),
+          bodyContent: req.body
+        }
+      });
+    }
+
+    const docRef = await db
       .collection(`forms/${formId}/submissions`)
       .add({
         data: cleanData,
         submittedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
+    console.log("✅ Successfully saved submission with ID:", docRef.id);
+    console.log("=== End Debug ===\n");
+
     const htmlAccepted = req.headers.accept?.includes("text/html");
 
     if (htmlAccepted) {
       return res.send(`
-        <h1>Form Submitted Successfully</h1>
-        <p>You will be redirected shortly.</p>
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Form Submitted Successfully</title>
+            <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                max-width: 600px; 
+                margin: 100px auto; 
+                padding: 20px;
+                text-align: center;
+              }
+              .success { 
+                color: #2e7d32; 
+                background: #e8f5e9; 
+                padding: 30px; 
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+              }
+              .success h1 { margin-top: 0; }
+              .success p { color: #555; }
+            </style>
+          </head>
+          <body>
+            <div class="success">
+              <h1>✓ Form Submitted Successfully!</h1>
+              <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
+            </div>
+          </body>
+        </html>
       `);
     }
 
     return res.json({ success: true, data: cleanData });
   } catch (err) {
+    console.error("❌ Error submitting form:", err);
+    console.error("Error stack:", err.stack);
     return res.status(500).json({ error: err.message });
   }
 });

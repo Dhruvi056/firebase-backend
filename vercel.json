@@ -4,6 +4,11 @@
   "outputDirectory": "build",
   "devCommand": "npm start",
   "framework": "create-react-app",
+  "functions": {
+    "api/f/[formId].js": {
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",

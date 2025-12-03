@@ -24,38 +24,78 @@ try {
       // Clean up the private key - handle both \n and actual newlines
       let privateKey = process.env.FIREBASE_PRIVATE_KEY;
       
-      // Remove quotes if present
-      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-        privateKey = privateKey.slice(1, -1);
-      }
-      if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+      console.log("Processing private key...");
+      console.log("Private key length:", privateKey.length);
+      console.log("Private key starts with:", privateKey.substring(0, 30));
+      
+      // Remove quotes if present (both single and double)
+      if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || 
+          (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
         privateKey = privateKey.slice(1, -1);
       }
       
-      // Replace \\n with actual newlines
+      // Replace \\n with actual newlines (handle escaped newlines)
       privateKey = privateKey.replace(/\\n/g, "\n");
       
-      // If it still doesn't have newlines, try to add them at key boundaries
-      if (!privateKey.includes("\n") && privateKey.includes("-----")) {
-        privateKey = privateKey.replace(/-----BEGIN PRIVATE KEY-----/g, "-----BEGIN PRIVATE KEY-----\n");
-        privateKey = privateKey.replace(/-----END PRIVATE KEY-----/g, "\n-----END PRIVATE KEY-----");
+      // Remove any extra whitespace at start/end
+      privateKey = privateKey.trim();
+      
+      // Validate key format
+      if (!privateKey.includes("-----BEGIN PRIVATE KEY-----")) {
+        console.error("❌ Invalid private key format: Missing BEGIN PRIVATE KEY");
+        throw new Error("Private key must start with '-----BEGIN PRIVATE KEY-----'");
       }
+      
+      if (!privateKey.includes("-----END PRIVATE KEY-----")) {
+        console.error("❌ Invalid private key format: Missing END PRIVATE KEY");
+        throw new Error("Private key must end with '-----END PRIVATE KEY-----'");
+      }
+      
+      // Ensure proper newlines around key boundaries
+      privateKey = privateKey.replace(/-----BEGIN PRIVATE KEY-----[^\n]/, "-----BEGIN PRIVATE KEY-----\n");
+      privateKey = privateKey.replace(/[^\n]-----END PRIVATE KEY-----/, "\n-----END PRIVATE KEY-----");
+      
+      // Remove any extra spaces or issues
+      privateKey = privateKey.replace(/\r\n/g, "\n"); // Windows line endings
+      privateKey = privateKey.replace(/\r/g, "\n"); // Old Mac line endings
+      
+      console.log("Private key cleaned successfully");
+      console.log("Key starts with:", privateKey.substring(0, 50));
+      console.log("Key ends with:", privateKey.substring(privateKey.length - 50));
 
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: privateKey,
-        }),
-      });
+      try {
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: privateKey,
+          }),
+        });
 
-      db = admin.firestore();
-      console.log("🔥 Firebase Admin Connected Successfully");
+        db = admin.firestore();
+        console.log("🔥 Firebase Admin Connected Successfully");
+      } catch (initError) {
+        console.error("❌ Firebase initialization failed:", initError.message);
+        console.error("Error details:", initError);
+        throw initError;
+      }
     }
   }
 } catch (err) {
   console.log("❌ FIREBASE ERROR:", err.message);
-  console.log("   Tip: Make sure FIREBASE_PRIVATE_KEY is on a single line with \\n for newlines");
+  console.log("   Error type:", err.name);
+  if (err.stack) {
+    console.log("   Stack:", err.stack);
+  }
+  console.log("\n💡 TROUBLESHOOTING TIPS:");
+  console.log("   1. Make sure FIREBASE_PRIVATE_KEY is in quotes: FIREBASE_PRIVATE_KEY=\"...\"");
+  console.log("   2. Keep \\n characters in the key (they represent newlines)");
+  console.log("   3. The key should start with '-----BEGIN PRIVATE KEY-----'");
+  console.log("   4. The key should end with '-----END PRIVATE KEY-----'");
+  console.log("   5. Copy the ENTIRE private_key value from Firebase JSON file");
+  console.log("   6. Make sure there are no extra spaces or characters");
+  console.log("\n   Example format in .env:");
+  console.log('   FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nMIIE...\\n-----END PRIVATE KEY-----\\n"');
 }
 
 // -------------------------

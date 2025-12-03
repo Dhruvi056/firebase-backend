@@ -9,17 +9,38 @@ export default function FormDetails({ form }) {
   useEffect(() => {
     if (!form) return;
 
+    console.log("FormDetails: Loading submissions for formId:", form.formId);
     const ref = collection(db, `forms/${form.formId}/submissions`);
-    const q = query(ref, orderBy("submittedAt", "desc"));
+    
+    // Try with orderBy, but handle errors if submittedAt doesn't exist
+    let q;
+    try {
+      q = query(ref, orderBy("submittedAt", "desc"));
+    } catch (error) {
+      console.warn("Could not order by submittedAt, using default order:", error);
+      q = query(ref);
+    }
 
-    const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        submittedAt: doc.data().submittedAt?.toDate()?.toLocaleString() || "N/A",
-      }));
-      setSubmissions(list);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        console.log(`FormDetails: Received ${snap.docs.length} submissions`);
+        const list = snap.docs.map((doc) => {
+          const data = doc.data();
+          console.log("Submission data:", { id: doc.id, data });
+          return {
+            id: doc.id,
+            ...data,
+            submittedAt: data.submittedAt?.toDate()?.toLocaleString() || data.submittedAt || "N/A",
+          };
+        });
+        setSubmissions(list);
+      },
+      (error) => {
+        console.error("FormDetails: Error fetching submissions:", error);
+        setSubmissions([]);
+      }
+    );
 
     return () => unsub();
   }, [form]);
@@ -47,10 +68,17 @@ export default function FormDetails({ form }) {
       </div>
 
       <div className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Submissions</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          Submissions {submissions.length > 0 && <span className="text-sm font-normal text-gray-500">({submissions.length})</span>}
+        </h2>
 
         {submissions.length === 0 ? (
-          <p>No submissions yet...</p>
+          <div>
+            <p className="text-gray-600">No submissions yet...</p>
+            <p className="text-sm text-gray-500 mt-2">
+              Submit a form using the endpoint above to see data here.
+            </p>
+          </div>
         ) : (
           <div className="overflow-auto border rounded-lg">
             <table className="w-full">

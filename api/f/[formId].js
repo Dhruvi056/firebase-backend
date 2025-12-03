@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import querystring from "querystring";
 
 // Initialize Firebase Admin SDK
 let db;
@@ -40,40 +41,55 @@ function parseFormData(body, contentType) {
     try {
       return typeof body === "string" ? JSON.parse(body) : body;
     } catch (e) {
+      console.error("JSON parse error:", e);
       return {};
     }
   } else if (contentType?.includes("application/x-www-form-urlencoded")) {
-    // Standard HTML form submission
+    // Standard HTML form submission - use querystring for proper parsing
     if (typeof body === "string") {
-      body.split("&").forEach((pair) => {
-        const [key, value = ""] = pair.split("=");
-        if (key) {
-          data[decodeURIComponent(key)] = decodeURIComponent(value);
-        }
-      });
+      try {
+        return querystring.parse(body);
+      } catch (e) {
+        console.error("querystring parse error:", e);
+        // Fallback to manual parsing
+        body.split("&").forEach((pair) => {
+          const [key, value = ""] = pair.split("=");
+          if (key) {
+            data[decodeURIComponent(key)] = decodeURIComponent(value);
+          }
+        });
+      }
     }
     return data;
   } else if (contentType?.includes("multipart/form-data")) {
     // Multipart form data (for file uploads)
     // For now, parse as URL-encoded if possible
     if (typeof body === "string") {
-      body.split("&").forEach((pair) => {
-        const [key, value = ""] = pair.split("=");
-        if (key) {
-          data[decodeURIComponent(key)] = decodeURIComponent(value);
-        }
-      });
+      try {
+        return querystring.parse(body);
+      } catch (e) {
+        body.split("&").forEach((pair) => {
+          const [key, value = ""] = pair.split("=");
+          if (key) {
+            data[decodeURIComponent(key)] = decodeURIComponent(value);
+          }
+        });
+      }
     }
     return data;
   } else {
     // Try to parse as URL-encoded by default (for standard HTML forms)
     if (typeof body === "string") {
-      body.split("&").forEach((pair) => {
-        const [key, value = ""] = pair.split("=");
-        if (key) {
-          data[decodeURIComponent(key)] = decodeURIComponent(value);
-        }
-      });
+      try {
+        return querystring.parse(body);
+      } catch (e) {
+        body.split("&").forEach((pair) => {
+          const [key, value = ""] = pair.split("=");
+          if (key) {
+            data[decodeURIComponent(key)] = decodeURIComponent(value);
+          }
+        });
+      }
     } else if (typeof body === "object" && body !== null) {
       return body;
     }
@@ -149,36 +165,87 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get request body - Vercel might provide req.body, otherwise read from stream
-    let body = req.body;
+    // Get request body - Handle Vercel's request format
     const contentType = req.headers["content-type"] || "";
+    let formData = {};
     
-    // If body is not already parsed, read from stream
-    if (body === undefined || body === null) {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
+    console.log("=== Form Submission Debug ===");
+    console.log("Method:", req.method);
+    console.log("Content-Type:", contentType);
+    console.log("FormId:", formId);
+    console.log("req.body type:", typeof req.body);
+    console.log("req.body:", JSON.stringify(req.body, null, 2));
+    console.log("req.headers:", JSON.stringify(req.headers, null, 2));
+    
+    // Vercel provides req.body, but it might be undefined, a string, or already parsed
+    if (req.body !== undefined && req.body !== null) {
+      if (typeof req.body === "object" && !Buffer.isBuffer(req.body) && !Array.isArray(req.body)) {
+        // Already parsed object (Vercel parsed it)
+        formData = req.body;
+        console.log("✓ Using parsed req.body object");
+      } else if (typeof req.body === "string") {
+        // String body - need to parse
+        console.log("✓ Parsing string body");
+        formData = parseFormData(req.body, contentType);
+      } else if (Buffer.isBuffer(req.body)) {
+        // Buffer - convert to string and parse
+        console.log("✓ Parsing buffer body");
+        formData = parseFormData(req.body.toString(), contentType);
       }
-      body = Buffer.concat(chunks).toString();
+    }
+    
+    // If still no data, the body might be empty or not provided
+    if (!formData || Object.keys(formData).length === 0) {
+      console.log("⚠ No data found in req.body");
+      console.log("Attempting to read raw body...");
+      
+      // For Vercel, sometimes we need to handle it differently
+      // Try to get body from request if available
+      if (req.body && typeof req.body === "string" && req.body.length > 0) {
+        formData = parseFormData(req.body, contentType);
+        console.log("✓ Parsed from string body:", formData);
+      }
     }
 
-    // Parse form data based on content type
-    const formData = parseFormData(body, contentType);
+    console.log("Final formData:", JSON.stringify(formData, null, 2));
 
     // Filter out empty values and system fields
     const cleanData = {};
     Object.keys(formData).forEach((key) => {
-      if (key && key !== "_gotcha" && formData[key] !== undefined && formData[key] !== null) {
-        cleanData[key] = formData[key];
+      // Handle array values (e.g., multiple checkboxes with same name)
+      const value = formData[key];
+      if (key && key !== "_gotcha" && value !== undefined && value !== null && value !== "") {
+        // If it's an array, join it; otherwise use the value as is
+        cleanData[key] = Array.isArray(value) ? value.join(", ") : value;
       }
     });
 
+    console.log("Clean data to save:", JSON.stringify(cleanData, null, 2));
+
+    // Validate that we have data to save
+    if (Object.keys(cleanData).length === 0) {
+      console.error("❌ No data to save after cleaning");
+      return res.status(400).json({ 
+        error: "No form data received",
+        debug: {
+          contentType,
+          bodyType: typeof req.body,
+          bodyPreview: typeof req.body === "string" ? req.body.substring(0, 200) : String(req.body).substring(0, 200),
+          parsedData: formData,
+          headers: req.headers
+        }
+      });
+    }
+
     // Use Firebase Admin SDK to write to Firestore
     const submissionsRef = db.collection(`forms/${formId}/submissions`);
-    await submissionsRef.add({
+    const docRef = await submissionsRef.add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    
+    console.log("✅ Successfully saved submission with ID:", docRef.id);
+    console.log("=== End Debug ===");
 
     // Check if request expects HTML response (standard form submission)
     const acceptsHtml = req.headers.accept?.includes("text/html");
@@ -228,7 +295,8 @@ export default async function handler(req, res) {
     });
 
   } catch (e) {
-    console.error("Error submitting form:", e);
+    console.error("❌ Error submitting form:", e);
+    console.error("Error stack:", e.stack);
     
     const acceptsHtml = req.headers.accept?.includes("text/html");
     
@@ -247,6 +315,7 @@ export default async function handler(req, res) {
             <div class="error">
               <h2>Error Submitting Form</h2>
               <p>There was an error processing your submission. Please try again later.</p>
+              <p style="font-size: 12px; color: #666;">Error: ${e.message}</p>
             </div>
           </body>
         </html>
@@ -255,7 +324,8 @@ export default async function handler(req, res) {
     
     return res.status(500).json({ 
       error: "Server error",
-      message: e.message 
+      message: e.message,
+      stack: process.env.NODE_ENV === "development" ? e.stack : undefined
     });
   }
 }

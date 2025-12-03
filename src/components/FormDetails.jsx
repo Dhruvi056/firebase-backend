@@ -57,18 +57,32 @@ export default function FormDetails({ form }) {
               <thead className="bg-gray-100">
                 <tr>
                   {fields.map((f) => (
-                    <th key={f} className="px-4 py-2 text-left text-sm">{f}</th>
+                    <th key={f} className="px-4 py-2 text-left text-sm font-semibold text-gray-700">{f}</th>
                   ))}
-                  <th className="px-4 py-2 text-left text-sm">Date</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {submissions.map((sub) => (
-                  <tr key={sub.id} className="border-t">
-                    {fields.map((f) => (
-                      <td key={f} className="px-4 py-2">{sub.data[f] || "-"}</td>
-                    ))}
-                    <td className="px-4 py-2 text-gray-500">{sub.submittedAt}</td>
+                  <tr key={sub.id} className="border-t hover:bg-gray-50">
+                    {fields.map((f) => {
+                      const value = sub.data?.[f];
+                      // Handle arrays, objects, and other types
+                      let displayValue = "-";
+                      if (value !== undefined && value !== null && value !== "") {
+                        if (Array.isArray(value)) {
+                          displayValue = value.join(", ");
+                        } else if (typeof value === "object") {
+                          displayValue = JSON.stringify(value);
+                        } else {
+                          displayValue = String(value);
+                        }
+                      }
+                      return (
+                        <td key={f} className="px-4 py-2 text-sm">{displayValue}</td>
+                      );
+                    })}
+                    <td className="px-4 py-2 text-gray-500 text-sm">{sub.submittedAt}</td>
                   </tr>
                 ))}
               </tbody>

@@ -7,6 +7,51 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ---------------------------------------------------------------------------
+// Client-side usage (example toast submission snippet)
+// This runs in the browser, NOT on the server. Paste into your HTML page.
+//
+// <script>
+// async function submitForm(event) {
+//   event.preventDefault();
+//   const form = event.target;
+//   const data = new URLSearchParams(new FormData(form)).toString();
+//   try {
+//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//         "Accept": "application/json"
+//       },
+//       body: data
+//     });
+//     const json = await res.json();
+//     const ok = res.ok;
+//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
+//     if (ok) form.reset();
+//   } catch (err) {
+//     showToast("Network error: " + err.message, false);
+//   }
+// }
+//
+// function showToast(msg, success) {
+//   const toast = document.createElement("div");
+//   toast.textContent = msg;
+//   toast.style.position = "fixed";
+//   toast.style.top = "20px";
+//   toast.style.right = "20px";
+//   toast.style.padding = "12px 16px";
+//   toast.style.borderRadius = "8px";
+//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
+//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
+//   toast.style.color = success ? "#166534" : "#991b1b";
+//   toast.style.zIndex = "9999";
+//   document.body.appendChild(toast);
+//   setTimeout(() => toast.remove(), 4000);
+// }
+// </script>
+// ---------------------------------------------------------------------------
+
 // -------------------------
 // INIT FIREBASE ADMIN
 // -------------------------
@@ -173,45 +218,8 @@ app.post("/api/f/:formId", async (req, res) => {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===\n");
 
-    const htmlAccepted = req.headers.accept?.includes("text/html");
-
-    if (htmlAccepted) {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Form Submitted Successfully</title>
-            <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
-            <style>
-              body { 
-                font-family: Arial, sans-serif; 
-                max-width: 600px; 
-                margin: 100px auto; 
-                padding: 20px;
-                text-align: center;
-              }
-              .success { 
-                color: #2e7d32; 
-                background: #e8f5e9; 
-                padding: 30px; 
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              .success h1 { margin-top: 0; }
-              .success p { color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="success">
-              <h1>✓ Form Submitted Successfully!</h1>
-              <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
-            </div>
-          </body>
-        </html>
-      `);
-    }
-
-    return res.json({ success: true, data: cleanData });
+    // Always return JSON so the frontend can show toast/snackbar without navigation
+    return res.json({ success: true, message: "Form submitted successfully", data: cleanData });
   } catch (err) {
     console.error("❌ Error submitting form:", err);
     console.error("Error stack:", err.stack);
@@ -219,9 +227,9 @@ app.post("/api/f/:formId", async (req, res) => {
   }
 });
 
-// -------------------------
+
 // GET FORM ROUTE
-// -------------------------
+
 app.get("/api/f/:formId", (req, res) => {
   res.send(`
     <h1>POST only</h1>
@@ -229,9 +237,9 @@ app.get("/api/f/:formId", (req, res) => {
   `);
 });
 
-// -------------------------
+
 // SERVE REACT IN PRODUCTION
-// -------------------------
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "build")));
   app.get("*", (req, res) => {
@@ -250,5 +258,5 @@ if (process.env.NODE_ENV === "production") {
 
 // -------------------------
 app.listen(PORT, () => {
-  console.log(`🚀 Server running: http://localhost:${PORT}`);
+  console.log(`Server running: http://localhost:${PORT}`);
 });

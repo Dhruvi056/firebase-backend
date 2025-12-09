@@ -1,6 +1,51 @@
 import admin from "firebase-admin";
 import querystring from "querystring";
 
+// ---------------------------------------------------------------------------
+// Client-side usage (example toast submission snippet)
+// This runs in the browser, NOT on the server. Paste into your HTML page.
+//
+// <script>
+// async function submitForm(event) {
+//   event.preventDefault();
+//   const form = event.target;
+//   const data = new URLSearchParams(new FormData(form)).toString();
+//   try {
+//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//         "Accept": "application/json"
+//       },
+//       body: data
+//     });
+//     const json = await res.json();
+//     const ok = res.ok;
+//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
+//     if (ok) form.reset();
+//   } catch (err) {
+//     showToast("Network error: " + err.message, false);
+//   }
+// }
+//
+// function showToast(msg, success) {
+//   const toast = document.createElement("div");
+//   toast.textContent = msg;
+//   toast.style.position = "fixed";
+//   toast.style.top = "20px";
+//   toast.style.right = "20px";
+//   toast.style.padding = "12px 16px";
+//   toast.style.borderRadius = "8px";
+//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
+//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
+//   toast.style.color = success ? "#166534" : "#991b1b";
+//   toast.style.zIndex = "9999";
+//   document.body.appendChild(toast);
+//   setTimeout(() => toast.remove(), 4000);
+// }
+// </script>
+// ---------------------------------------------------------------------------
+
 
 // Initialize Firebase Admin SDK
 let db;
@@ -266,46 +311,7 @@ export default async function handler(req, res) {
     console.log("=== End Debug ===");
 
     // Check if request expects HTML response (standard form submission)
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-    
-    if (acceptsHtml) {
-      // Return HTML success page for standard form submissions
-      return res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Form Submitted Successfully</title>
-            <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
-            <style>
-              body { 
-                font-family: Arial, sans-serif; 
-                max-width: 600px; 
-                margin: 100px auto; 
-                padding: 20px;
-                text-align: center;
-              }
-              .success { 
-                color: #2e7d32; 
-                background: #e8f5e9; 
-                padding: 30px; 
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              .success h1 { margin-top: 0; }
-              .success p { color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="success">
-              <h1>✓ Form Submitted Successfully!</h1>
-              <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
-            </div>
-          </body>
-        </html>
-      `);
-    }
-
-    // Return JSON response for AJAX/fetch requests
+    // Always return JSON so clients can handle UI (toast/snackbar) without navigation
     return res.status(200).json({
       success: true,
       message: "Form submitted successfully!",
@@ -316,30 +322,7 @@ export default async function handler(req, res) {
     console.error("❌ Error submitting form:", e);
     console.error("Error stack:", e.stack);
     
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-    
-    if (acceptsHtml) {
-      return res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Submission Error</title>
-            <style>
-              body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-              .error { color: #d32f2f; background: #ffebee; padding: 15px; border-radius: 5px; }
-            </style>
-          </head>
-          <body>
-            <div class="error">
-              <h2>Error Submitting Form</h2>
-              <p>There was an error processing your submission. Please try again later.</p>
-              <p style="font-size: 12px; color: #666;">Error: ${e.message}</p>
-            </div>
-          </body>
-        </html>
-      `);
-    }
-    
+    // Always return JSON for error cases too
     return res.status(500).json({ 
       error: "Server error",
       message: e.message,

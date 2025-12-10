@@ -1,52 +1,6 @@
 import admin from "firebase-admin";
 import querystring from "querystring";
 
-// ---------------------------------------------------------------------------
-// Client-side usage (example toast submission snippet)
-// This runs in the browser, NOT on the server. Paste into your HTML page.
-//
-// <script>
-// async function submitForm(event) {
-//   event.preventDefault();
-//   const form = event.target;
-//   const data = new URLSearchParams(new FormData(form)).toString();
-//   try {
-//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/x-www-form-urlencoded",
-//         "Accept": "application/json"
-//       },
-//       body: data
-//     });
-//     const json = await res.json();
-//     const ok = res.ok;
-//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
-//     if (ok) form.reset();
-//   } catch (err) {
-//     showToast("Network error: " + err.message, false);
-//   }
-// }
-//
-// function showToast(msg, success) {
-//   const toast = document.createElement("div");
-//   toast.textContent = msg;
-//   toast.style.position = "fixed";
-//   toast.style.top = "20px";
-//   toast.style.right = "20px";
-//   toast.style.padding = "12px 16px";
-//   toast.style.borderRadius = "8px";
-//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
-//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
-//   toast.style.color = success ? "#166534" : "#991b1b";
-//   toast.style.zIndex = "9999";
-//   document.body.appendChild(toast);
-//   setTimeout(() => toast.remove(), 4000);
-// }
-// </script>
-// ---------------------------------------------------------------------------
-
-
 // Initialize Firebase Admin SDK
 let db;
 if (!admin.apps.length) {
@@ -54,13 +8,12 @@ if (!admin.apps.length) {
     if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
       console.error("Missing Firebase Admin environment variables");
     } else {
-      // Clean up private key
       let privateKey = process.env.FIREBASE_PRIVATE_KEY;
       if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
         privateKey = privateKey.slice(1, -1);
       }
       privateKey = privateKey.replace(/\\n/g, "\n");
-      
+
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
@@ -68,6 +21,7 @@ if (!admin.apps.length) {
           privateKey: privateKey,
         }),
       });
+
       db = admin.firestore();
       console.log("Firebase Admin initialized successfully");
     }
@@ -78,12 +32,11 @@ if (!admin.apps.length) {
   db = admin.firestore();
 }
 
-// Helper function to parse form data
+// Parse form body
 function parseFormData(body, contentType) {
   const data = {};
-  
+
   if (contentType?.includes("application/json")) {
-    // JSON data
     try {
       return typeof body === "string" ? JSON.parse(body) : body;
     } catch (e) {
@@ -91,266 +44,115 @@ function parseFormData(body, contentType) {
       return {};
     }
   } else if (contentType?.includes("application/x-www-form-urlencoded")) {
-    // Standard HTML form submission - use querystring for proper parsing
     if (typeof body === "string") {
       try {
         return querystring.parse(body);
-      } catch (e) {
-        console.error("querystring parse error:", e);
-        // Fallback to manual parsing
+      } catch {
         body.split("&").forEach((pair) => {
           const [key, value = ""] = pair.split("=");
-          if (key) {
-            data[decodeURIComponent(key)] = decodeURIComponent(value);
-          }
-        });
-      }
-    }
-    return data;
-  } else if (contentType?.includes("multipart/form-data")) {
-    // Multipart form data (for file uploads)
-    // For now, parse as URL-encoded if possible
-    if (typeof body === "string") {
-      try {
-        return querystring.parse(body);
-      } catch (e) {
-        body.split("&").forEach((pair) => {
-          const [key, value = ""] = pair.split("=");
-          if (key) {
-            data[decodeURIComponent(key)] = decodeURIComponent(value);
-          }
+          if (key) data[decodeURIComponent(key)] = decodeURIComponent(value);
         });
       }
     }
     return data;
   } else {
-    // Try to parse as URL-encoded by default (for standard HTML forms)
     if (typeof body === "string") {
       try {
         return querystring.parse(body);
-      } catch (e) {
+      } catch {
         body.split("&").forEach((pair) => {
           const [key, value = ""] = pair.split("=");
-          if (key) {
-            data[decodeURIComponent(key)] = decodeURIComponent(value);
-          }
+          if (key) data[decodeURIComponent(key)] = decodeURIComponent(value);
         });
       }
-    } else if (typeof body === "object" && body !== null) {
-      return body;
     }
-    return data;
+    return body || {};
   }
 }
 
 export default async function handler(req, res) {
-  // Set CORS headers to allow cross-origin form submissions
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight OPTIONS request
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-  // Prevent browser GET redirect
   if (req.method !== "POST") {
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-    
-    if (acceptsHtml) {
-      // Return HTML response for browser GET requests
-      return res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Form Endpoint</title>
-            <style>
-              body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-              .error { color: #d32f2f; background: #ffebee; padding: 15px; border-radius: 5px; }
-            </style>
-          </head>
-          <body>
-            <div class="error">
-              <h2>This endpoint only accepts POST requests</h2>
-              <p>This URL is meant to be used as a form action. Do not open it directly in a browser.</p>
-              <p>Use it in your HTML form like this:</p>
-              <pre style="background: #f5f5f5; padding: 10px; border-radius: 3px;">
-&lt;form action="${req.url}" method="POST"&gt;
-  &lt;input type="text" name="name" /&gt;
-  &lt;input type="email" name="email" /&gt;
-  &lt;button type="submit"&gt;Submit&lt;/button&gt;
-&lt;/form&gt;
-              </pre>
-            </div>
-          </body>
-        </html>
-      `);
-    }
-    
     return res.status(200).json({
       success: false,
       message: "This endpoint only accepts POST requests.",
-      tip: "Do not open this URL directly in browser."
     });
   }
 
-  // Get formId from query (Vercel dynamic route)
   const formId = req.query.formId;
+  if (!formId) return res.status(400).json({ error: "Missing formId" });
 
-  if (!formId) {
-    return res.status(400).json({ error: "Missing formId" });
-  }
-
-  // Check if Firebase is initialized
   if (!db) {
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Firebase not initialized",
-      message: "Please configure Firebase Admin credentials in Vercel environment variables"
     });
   }
 
   try {
-    // Get request body - Vercel serverless functions need special handling
     const contentType = req.headers["content-type"] || "";
     let formData = {};
     let rawBody = "";
-    
-    console.log("=== Form Submission Debug ===");
-    console.log("Method:", req.method);
-    console.log("Content-Type:", contentType);
-    console.log("FormId:", formId);
-    console.log("req.body type:", typeof req.body);
-    console.log("req.body exists:", req.body !== undefined);
-    
-    // Vercel may provide req.body as a parsed object, string, or undefined
-    // For form-urlencoded, Vercel sometimes doesn't parse it automatically
+
+    // Parse body
     if (req.body !== undefined && req.body !== null) {
-      if (typeof req.body === "object" && !Buffer.isBuffer(req.body) && !Array.isArray(req.body) && Object.keys(req.body).length > 0) {
-        // Already parsed object (Vercel parsed it)
+      if (typeof req.body === "object" && Object.keys(req.body).length > 0) {
         formData = req.body;
-        console.log("✓ Using parsed req.body object:", formData);
       } else if (typeof req.body === "string") {
-        // String body - parse it
         rawBody = req.body;
-        console.log("✓ Got string body, length:", rawBody.length);
         formData = parseFormData(rawBody, contentType);
-        console.log("✓ Parsed formData:", formData);
-      } else if (Buffer.isBuffer(req.body)) {
-        // Buffer - convert to string and parse
-        rawBody = req.body.toString();
-        console.log("✓ Got buffer body, length:", rawBody.length);
-        formData = parseFormData(rawBody, contentType);
-        console.log("✓ Parsed formData:", formData);
       }
     }
-    
-    // If still no data, return detailed error
+
     if (!formData || Object.keys(formData).length === 0) {
-      console.log("⚠ Body is empty or could not be parsed");
-      console.log("Request details:", {
-        method: req.method,
-        contentType,
-        bodyType: typeof req.body,
-        bodyExists: req.body !== undefined,
-        bodyValue: req.body,
-        url: req.url,
-        headers: Object.keys(req.headers)
-      });
-      
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "No form data received",
-        hint: "Make sure your form has name attributes on all inputs and is submitting as application/x-www-form-urlencoded",
-        debug: {
-          contentType,
-          bodyType: typeof req.body,
-          bodyExists: req.body !== undefined,
-          bodyPreview: typeof req.body === "string" ? req.body.substring(0, 100) : String(req.body).substring(0, 100)
-        }
       });
     }
 
-    console.log("Final formData:", JSON.stringify(formData, null, 2));
-
-    // Filter out empty values and system fields
+    // Clean data
     const cleanData = {};
     Object.keys(formData).forEach((key) => {
-      // Handle array values (e.g., multiple checkboxes with same name)
       const value = formData[key];
-      if (key && key !== "_gotcha" && value !== undefined && value !== null && value !== "") {
-        // If it's an array, join it; otherwise use the value as is
+      if (key && value !== "" && value !== null && value !== undefined) {
         cleanData[key] = Array.isArray(value) ? value.join(", ") : value;
       }
     });
 
-    console.log("Clean data to save:", JSON.stringify(cleanData, null, 2));
-
-    // Validate that we have data to save
     if (Object.keys(cleanData).length === 0) {
-      console.error("❌ No data to save after cleaning");
-      return res.status(400).json({ 
-        error: "No form data received",
-        debug: {
-          contentType,
-          bodyType: typeof req.body,
-          bodyPreview: typeof req.body === "string" ? req.body.substring(0, 200) : String(req.body).substring(0, 200),
-          parsedData: formData,
-          headers: req.headers
-        }
-      });
+      return res.status(400).json({ error: "No usable form data" });
     }
 
-    // Use Firebase Admin SDK to write to Firestore
+    // Save to Firestore
     const submissionsRef = db.collection(`forms/${formId}/submissions`);
-    const docRef = await submissionsRef.add({
+    await submissionsRef.add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    
-    console.log("✅ Successfully saved submission with ID:", docRef.id);
-    console.log("=== End Debug ===");
 
-    // Check if request expects HTML response (standard form submission without script)
+    // If HTML form, return toast page WITHOUT NAVIGATION
     const acceptsHtml = req.headers.accept?.includes("text/html");
-    
+    const message = "Form submitted successfully!";
+
     if (acceptsHtml) {
-      // Return HTML page that immediately goes back and shows toast on parent page
-      const referer = req.headers.referer || '/';
-      const message = 'Form submitted successfully!';
-      
       return res.status(200).send(`
         <!DOCTYPE html>
         <html>
           <head>
             <title>Form Submitted</title>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
-                font-family: Arial, sans-serif;
+                font-family: Arial;
                 background: transparent;
                 display: flex;
-                align-items: center;
                 justify-content: center;
-                min-height: 100vh;
-              }
-              .toast-container {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 99999;
-                animation: slideIn 0.2s ease-out;
-              }
-              @keyframes slideIn {
-                from {
-                  transform: translateX(400px);
-                  opacity: 0;
-                }
-                to {
-                  transform: translateX(0);
-                  opacity: 1;
-                }
+                align-items: center;
+                height: 100vh;
               }
               .toast {
                 background: #e8f5e9;
@@ -358,192 +160,40 @@ export default async function handler(req, res) {
                 padding: 16px 20px;
                 border-radius: 8px;
                 box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
                 border-left: 4px solid #4caf50;
+                animation: fadeIn 0.3s;
               }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-20px); }
+                to { opacity: 1; transform: translateY(0); }
               }
             </style>
           </head>
           <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✓</span>
-                <span id="toast-message">${message}</span>
-              </div>
-            </div>
+            <div class="toast">${message}</div>
+
             <script>
-              // Store message in localStorage for parent page
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: '${message}',
-                  success: true,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              // Show toast briefly
-              const toast = document.getElementById('toast');
-              
-              // Immediately try to go back (no delay)
-              if (window.history.length > 1) {
-                // Show toast for 0.1 seconds then go back
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                // If no history, redirect to referer
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  // Show toast for 4 seconds if can't go back
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              // Auto-hide toast after going back (in case back doesn't work)
+              // No navigation — only show toast
               setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
+                document.querySelector('.toast').style.opacity = '0';
+              }, 3500);
             </script>
           </body>
         </html>
       `);
     }
 
-    // Return JSON for AJAX/fetch requests (with script tag)
+    // For fetch() users
     return res.status(200).json({
       success: true,
-      message: "Form submitted successfully!",
+      message,
       data: cleanData,
     });
 
   } catch (e) {
-    console.error("❌ Error submitting form:", e);
-    console.error("Error stack:", e.stack);
-    
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-    
-    if (acceptsHtml) {
-      const referer = req.headers.referer || '/';
-      const errorMsg = e.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      
-      return res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Submission Error</title>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body {
-                font-family: Arial, sans-serif;
-                background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
-              }
-              .toast-container {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 99999;
-                animation: slideIn 0.2s ease-out;
-              }
-              @keyframes slideIn {
-                from {
-                  transform: translateX(400px);
-                  opacity: 0;
-                }
-                to {
-                  transform: translateX(0);
-                  opacity: 1;
-                }
-              }
-              .toast {
-                background: #fee2e2;
-                color: #991b1b;
-                padding: 16px 20px;
-                border-radius: 8px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
-                border-left: 4px solid #f44336;
-              }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✗</span>
-                <span id="toast-message">Error: ${errorMsg}</span>
-              </div>
-            </div>
-            <script>
-              // Store error message in localStorage
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: 'Error: ${errorMsg}',
-                  success: false,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              const toast = document.getElementById('toast');
-              
-              // Immediately try to go back
-              if (window.history.length > 1) {
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
-            </script>
-          </body>
-        </html>
-      `);
-    }
-    
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Server error",
       message: e.message,
-      stack: process.env.NODE_ENV === "development" ? e.stack : undefined
     });
   }
 }

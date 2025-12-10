@@ -7,6 +7,51 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ---------------------------------------------------------------------------
+// Client-side usage (example toast submission snippet)
+// This runs in the browser, NOT on the server. Paste into your HTML page.
+//
+// <script>
+// async function submitForm(event) {
+//   event.preventDefault();
+//   const form = event.target;
+//   const data = new URLSearchParams(new FormData(form)).toString();
+//   try {
+//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//         "Accept": "application/json"
+//       },
+//       body: data
+//     });
+//     const json = await res.json();
+//     const ok = res.ok;
+//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
+//     if (ok) form.reset();
+//   } catch (err) {
+//     showToast("Network error: " + err.message, false);
+//   }
+// }
+//
+// function showToast(msg, success) {
+//   const toast = document.createElement("div");
+//   toast.textContent = msg;
+//   toast.style.position = "fixed";
+//   toast.style.top = "20px";
+//   toast.style.right = "20px";
+//   toast.style.padding = "12px 16px";
+//   toast.style.borderRadius = "8px";
+//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
+//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
+//   toast.style.color = success ? "#166534" : "#991b1b";
+//   toast.style.zIndex = "9999";
+//   document.body.appendChild(toast);
+//   setTimeout(() => toast.remove(), 4000);
+// }
+// </script>
+// ---------------------------------------------------------------------------
+
 // -------------------------
 // INIT FIREBASE ADMIN
 // -------------------------
@@ -108,7 +153,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
@@ -173,26 +218,11 @@ app.post("/api/f/:formId", async (req, res) => {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===\n");
 
-    // Check if request expects HTML response (standard form submission without script)
-    const acceptHeader = req.headers.accept || req.headers["accept"] || "";
-    const htmlAccepted = acceptHeader.includes("text/html");
-    const jsonAccepted = acceptHeader.includes("application/json");
-    
-    console.log("Accept header:", acceptHeader);
-    console.log("Accepts HTML:", htmlAccepted);
-    console.log("Accepts JSON:", jsonAccepted);
-    
-    // If explicitly requesting JSON, return JSON
-    if (jsonAccepted && !htmlAccepted) {
-      return res.json({ success: true, message: "Form submitted successfully!", data: cleanData });
-    }
-    
-    if (htmlAccepted) {
-      // Return HTML page that immediately goes back and shows toast
-      const referer = req.headers.referer || '/';
-      const message = 'Form submitted successfully!';
-      
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+    const acceptsHtml = req.headers.accept?.includes("text/html");
+    const referer = req.headers.referer || "#";
+
+    if (acceptsHtml) {
+      // Return HTML page with toast that auto-redirects (for users without script tag access)
       return res.send(`
         <!DOCTYPE html>
         <html>
@@ -201,25 +231,29 @@ app.post("/api/f/:formId", async (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
+                margin: 0;
+                padding: 0;
                 font-family: Arial, sans-serif;
                 background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
               }
-              .toast-container {
+              #toast {
                 position: fixed;
                 top: 20px;
                 right: 20px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                background: #e8f5e9;
+                color: #166534;
                 z-index: 99999;
-                animation: slideIn 0.2s ease-out;
+                max-width: 400px;
+                font-size: 14px;
+                animation: slideIn 0.3s ease-out;
               }
               @keyframes slideIn {
                 from {
-                  transform: translateX(400px);
+                  transform: translateX(100%);
                   opacity: 0;
                 }
                 to {
@@ -227,67 +261,32 @@ app.post("/api/f/:formId", async (req, res) => {
                   opacity: 1;
                 }
               }
-              .toast {
-                background: #e8f5e9;
-                color: #166534;
-                padding: 16px 20px;
-                border-radius: 8px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
-                border-left: 4px solid #4caf50;
+              @keyframes slideOut {
+                from {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+                to {
+                  transform: translateX(100%);
+                  opacity: 0;
+                }
               }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
+              #toast.error {
+                background: #fee2e2;
+                color: #991b1b;
               }
             </style>
           </head>
           <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✓</span>
-                <span id="toast-message">${message}</span>
-              </div>
-            </div>
+            <div id="toast">✓ Form submitted successfully!</div>
             <script>
-              // Store message in localStorage for parent page
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: '${message}',
-                  success: true,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              // Show toast briefly
-              const toast = document.getElementById('toast');
-              
-              // Immediately try to go back (no delay)
-              if (window.history.length > 1) {
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
+              setTimeout(function() {
+                var toast = document.getElementById('toast');
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(function() {
+                  window.location.href = ${JSON.stringify(referer)};
+                }, 300);
+              }, 3000);
             </script>
           </body>
         </html>
@@ -295,19 +294,15 @@ app.post("/api/f/:formId", async (req, res) => {
     }
 
     // Return JSON for AJAX/fetch requests (with script tag)
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.json({ success: true, message: "Form submitted successfully!", data: cleanData });
+    return res.json({ success: true, message: "Form submitted successfully", data: cleanData });
   } catch (err) {
     console.error("❌ Error submitting form:", err);
     console.error("Error stack:", err.stack);
     
-    const htmlAccepted = req.headers.accept?.includes("text/html");
+    const acceptsHtml = req.headers.accept?.includes("text/html");
+    const referer = req.headers.referer || "#";
     
-    if (htmlAccepted) {
-      const referer = req.headers.referer || '/';
-      const errorMsg = err.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (acceptsHtml) {
       return res.status(500).send(`
         <!DOCTYPE html>
         <html>
@@ -316,25 +311,29 @@ app.post("/api/f/:formId", async (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
+                margin: 0;
+                padding: 0;
                 font-family: Arial, sans-serif;
                 background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
               }
-              .toast-container {
+              #toast {
                 position: fixed;
                 top: 20px;
                 right: 20px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                background: #fee2e2;
+                color: #991b1b;
                 z-index: 99999;
-                animation: slideIn 0.2s ease-out;
+                max-width: 400px;
+                font-size: 14px;
+                animation: slideIn 0.3s ease-out;
               }
               @keyframes slideIn {
                 from {
-                  transform: translateX(400px);
+                  transform: translateX(100%);
                   opacity: 0;
                 }
                 to {
@@ -342,64 +341,28 @@ app.post("/api/f/:formId", async (req, res) => {
                   opacity: 1;
                 }
               }
-              .toast {
-                background: #fee2e2;
-                color: #991b1b;
-                padding: 16px 20px;
-                border-radius: 8px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
-                border-left: 4px solid #f44336;
-              }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
+              @keyframes slideOut {
+                from {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+                to {
+                  transform: translateX(100%);
+                  opacity: 0;
+                }
               }
             </style>
           </head>
           <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✗</span>
-                <span id="toast-message">Error: ${errorMsg}</span>
-              </div>
-            </div>
+            <div id="toast">✗ Error: ${err.message}</div>
             <script>
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: 'Error: ${errorMsg}',
-                  success: false,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              const toast = document.getElementById('toast');
-              
-              if (window.history.length > 1) {
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
+              setTimeout(function() {
+                var toast = document.getElementById('toast');
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(function() {
+                  window.location.href = ${JSON.stringify(referer)};
+                }, 300);
+              }, 3000);
             </script>
           </body>
         </html>

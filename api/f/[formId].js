@@ -147,7 +147,7 @@ export default async function handler(req, res) {
   // Set CORS headers to allow cross-origin form submissions
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
@@ -310,30 +310,12 @@ export default async function handler(req, res) {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===");
 
-    // Check if request expects HTML response (standard form submission without script)
-    const acceptHeader = req.headers.accept || req.headers["accept"] || "";
-    const acceptsHtml = acceptHeader.includes("text/html");
-    const acceptsJson = acceptHeader.includes("application/json");
-    
-    console.log("Accept header:", acceptHeader);
-    console.log("Accepts HTML:", acceptsHtml);
-    console.log("Accepts JSON:", acceptsJson);
-    
-    // If explicitly requesting JSON, return JSON
-    if (acceptsJson && !acceptsHtml) {
-      return res.status(200).json({
-        success: true,
-        message: "Form submitted successfully!",
-        data: cleanData,
-      });
-    }
+    // Check if request expects HTML response (standard form submission without script tag)
+    const acceptsHtml = req.headers.accept?.includes("text/html");
     
     if (acceptsHtml) {
-      // Return HTML page that immediately goes back and shows toast on parent page
-      const referer = req.headers.referer || '/';
-      const message = 'Form submitted successfully!';
-      
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      // Return HTML page with toast that auto-redirects
+      const referer = req.headers.referer || "#";
       return res.status(200).send(`
         <!DOCTYPE html>
         <html>
@@ -342,25 +324,29 @@ export default async function handler(req, res) {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
+                margin: 0;
+                padding: 0;
                 font-family: Arial, sans-serif;
                 background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
               }
-              .toast-container {
+              #toast {
                 position: fixed;
                 top: 20px;
                 right: 20px;
+                padding: 16px 24px;
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                background: #e8f5e9;
+                color: #166534;
                 z-index: 99999;
-                animation: slideIn 0.2s ease-out;
+                max-width: 400px;
+                font-size: 14px;
+                animation: slideIn 0.3s ease-out;
               }
               @keyframes slideIn {
                 from {
-                  transform: translateX(400px);
+                  transform: translateX(100%);
                   opacity: 0;
                 }
                 to {
@@ -368,79 +354,40 @@ export default async function handler(req, res) {
                   opacity: 1;
                 }
               }
-              .toast {
-                background: #e8f5e9;
-                color: #166534;
-                padding: 16px 20px;
-                border-radius: 8px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
-                border-left: 4px solid #4caf50;
+              @keyframes slideOut {
+                from {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+                to {
+                  transform: translateX(100%);
+                  opacity: 0;
+                }
               }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
+              #toast.error {
+                background: #fee2e2;
+                color: #991b1b;
               }
             </style>
           </head>
           <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✓</span>
-                <span id="toast-message">${message}</span>
-              </div>
-            </div>
+            <div id="toast">✓ Form submitted successfully!</div>
             <script>
-              // Store message in localStorage for parent page
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: '${message}',
-                  success: true,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              // Show toast briefly
-              const toast = document.getElementById('toast');
-              
-              // Immediately try to go back (no delay)
-              if (window.history.length > 1) {
-                // Show toast for 0.1 seconds then go back
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                // If no history, redirect to referer
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  // Show toast for 4 seconds if can't go back
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              // Auto-hide toast after going back (in case back doesn't work)
-              setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
+              // Show toast for 3 seconds, then redirect
+              setTimeout(function() {
+                var toast = document.getElementById('toast');
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(function() {
+                  window.location.href = ${JSON.stringify(referer)};
+                }, 300);
+              }, 3000);
             </script>
           </body>
         </html>
       `);
     }
 
-    // Return JSON for AJAX/fetch requests (with script tag)
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    // Return JSON response for AJAX/fetch requests (with script tag)
     return res.status(200).json({
       success: true,
       message: "Form submitted successfully!",
@@ -451,113 +398,7 @@ export default async function handler(req, res) {
     console.error("❌ Error submitting form:", e);
     console.error("Error stack:", e.stack);
     
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-    
-    if (acceptsHtml) {
-      const referer = req.headers.referer || '/';
-      const errorMsg = e.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Submission Error</title>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body {
-                font-family: Arial, sans-serif;
-                background: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
-              }
-              .toast-container {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 99999;
-                animation: slideIn 0.2s ease-out;
-              }
-              @keyframes slideIn {
-                from {
-                  transform: translateX(400px);
-                  opacity: 0;
-                }
-                to {
-                  transform: translateX(0);
-                  opacity: 1;
-                }
-              }
-              .toast {
-                background: #fee2e2;
-                color: #991b1b;
-                padding: 16px 20px;
-                border-radius: 8px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                max-width: 320px;
-                font-size: 14px;
-                line-height: 1.5;
-                border-left: 4px solid #f44336;
-              }
-              .toast-icon {
-                font-size: 20px;
-                margin-right: 8px;
-                display: inline-block;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="toast-container">
-              <div class="toast" id="toast">
-                <span class="toast-icon">✗</span>
-                <span id="toast-message">Error: ${errorMsg}</span>
-              </div>
-            </div>
-            <script>
-              // Store error message in localStorage
-              try {
-                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
-                  message: 'Error: ${errorMsg}',
-                  success: false,
-                  timestamp: Date.now()
-                }));
-              } catch(e) {}
-              
-              const toast = document.getElementById('toast');
-              
-              // Immediately try to go back
-              if (window.history.length > 1) {
-                setTimeout(() => {
-                  window.history.back();
-                }, 100);
-              } else {
-                const referer = '${referer}';
-                if (referer && referer !== window.location.href) {
-                  setTimeout(() => {
-                    window.location.href = referer;
-                  }, 100);
-                } else {
-                  setTimeout(() => {
-                    toast.style.transition = 'opacity 0.3s';
-                    toast.style.opacity = '0';
-                  }, 3500);
-                }
-              }
-              
-              setTimeout(() => {
-                toast.style.transition = 'opacity 0.3s';
-                toast.style.opacity = '0';
-              }, 4000);
-            </script>
-          </body>
-        </html>
-      `);
-    }
-    
+    // Always return JSON for error cases too
     return res.status(500).json({ 
       error: "Server error",
       message: e.message,

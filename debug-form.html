@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Form - Check Console</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .form-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .debug-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>Debug Form Test</h1>
+        
+        <div class="debug-info">
+            <strong>Instructions:</strong><br>
+            1. Open Browser Console (F12)<br>
+            2. Submit form<br>
+            3. Check console logs for errors<br>
+            4. Check Network tab for request/response
+        </div>
+        
+        <!-- Replace with your actual endpoint -->
+        <form action="https://firebase-backend-7ohr1u7ye-dhruvi056s-projects.vercel.app/api/f/gvb0rtc2">
+            <div class="form-group">
+                <label for="fullName">Full Name *</label>
+                <input type="text" id="fullName" name="fullName" required value="Test User" />
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email *</label>
+                <input type="email" id="email" name="email" required value="test@example.com" />
+            </div>
+            
+            <button type="submit">Submit Form</button>
+        </form>
+        
+        <div id="debug-output" style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 12px; font-family: monospace; display: none;">
+            <strong>Debug Output:</strong>
+            <div id="debug-content"></div>
+        </div>
+    </div>
+
+    <!-- IMPORTANT: Script tag must be included -->
+    <script src="https://firebase-backend-7ohr1u7ye-dhruvi056s-projects.vercel.app/embed-form.js"></script>
+    
+    <script>
+        // Additional debugging
+        window.addEventListener('error', function(e) {
+            console.error('[Global Error]', e.error);
+            document.getElementById('debug-output').style.display = 'block';
+            document.getElementById('debug-content').innerHTML += '<div style="color: red;">Error: ' + e.message + '</div>';
+        });
+        
+        // Check if script loaded
+        setTimeout(() => {
+            if (typeof window.__firebase_form_loaded === 'undefined') {
+                console.warn('[Firebase Form] Script may not have loaded properly');
+                document.getElementById('debug-output').style.display = 'block';
+                document.getElementById('debug-content').innerHTML += '<div style="color: orange;">Warning: embed-form.js may not have loaded</div>';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
+

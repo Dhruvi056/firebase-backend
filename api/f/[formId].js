@@ -147,7 +147,7 @@ export default async function handler(req, res) {
   // Set CORS headers to allow cross-origin form submissions
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
@@ -311,13 +311,29 @@ export default async function handler(req, res) {
     console.log("=== End Debug ===");
 
     // Check if request expects HTML response (standard form submission without script)
-    const acceptsHtml = req.headers.accept?.includes("text/html");
+    const acceptHeader = req.headers.accept || req.headers["accept"] || "";
+    const acceptsHtml = acceptHeader.includes("text/html");
+    const acceptsJson = acceptHeader.includes("application/json");
+    
+    console.log("Accept header:", acceptHeader);
+    console.log("Accepts HTML:", acceptsHtml);
+    console.log("Accepts JSON:", acceptsJson);
+    
+    // If explicitly requesting JSON, return JSON
+    if (acceptsJson && !acceptsHtml) {
+      return res.status(200).json({
+        success: true,
+        message: "Form submitted successfully!",
+        data: cleanData,
+      });
+    }
     
     if (acceptsHtml) {
       // Return HTML page that immediately goes back and shows toast on parent page
       const referer = req.headers.referer || '/';
       const message = 'Form submitted successfully!';
       
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(200).send(`
         <!DOCTYPE html>
         <html>
@@ -424,6 +440,7 @@ export default async function handler(req, res) {
     }
 
     // Return JSON for AJAX/fetch requests (with script tag)
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
     return res.status(200).json({
       success: true,
       message: "Form submitted successfully!",
@@ -440,6 +457,7 @@ export default async function handler(req, res) {
       const referer = req.headers.referer || '/';
       const errorMsg = e.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
       
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.status(500).send(`
         <!DOCTYPE html>
         <html>

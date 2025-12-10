@@ -47,11 +47,16 @@
     const form = e.target;
     // Check both data attribute and action attribute
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-    if (!endpoint) return; // Not our form
+    if (!endpoint) {
+      console.log("[Firebase Form] No endpoint found, skipping");
+      return; // Not our form
+    }
 
     // CRITICAL: Prevent default form submission (no navigation)
     e.preventDefault();
     e.stopPropagation();
+    
+    console.log("[Firebase Form] Submitting to:", endpoint);
     
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn) {
@@ -61,7 +66,11 @@
     }
 
     try {
-      const body = new URLSearchParams(new FormData(form)).toString();
+      const formData = new FormData(form);
+      const body = new URLSearchParams(formData).toString();
+      
+      console.log("[Firebase Form] Request body:", body);
+      
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -70,14 +79,33 @@
         },
         body,
       });
+      
+      console.log("[Firebase Form] Response status:", res.status);
+      console.log("[Firebase Form] Response headers:", res.headers);
+      
+      if (!res.ok) {
+        // Try to get error message
+        let errorMsg = `Server error: ${res.status}`;
+        try {
+          const errorJson = await res.json();
+          errorMsg = errorJson.error || errorJson.message || errorMsg;
+        } catch(e) {
+          const text = await res.text();
+          errorMsg = text || errorMsg;
+        }
+        showToast(errorMsg, false);
+        return;
+      }
+      
       const json = await res.json();
-      const ok = res.ok;
+      console.log("[Firebase Form] Response JSON:", json);
       
       // Show toast message
-      showToast(ok ? json.message || "Form submitted successfully!" : json.error || json.message || "Failed", ok);
+      const message = json.message || json.success ? "Form submitted successfully!" : (json.error || "Failed");
+      showToast(message, json.success !== false);
       
       // Reset form after successful submission
-      if (ok) {
+      if (json.success !== false) {
         form.reset();
         // Reset all form fields including checkboxes and radio buttons
         form.querySelectorAll("input[type=checkbox], input[type=radio]").forEach(input => {
@@ -88,6 +116,7 @@
         });
       }
     } catch (err) {
+      console.error("[Firebase Form] Error:", err);
       showToast("Network error: " + err.message, false);
     } finally {
       if (submitBtn) {
@@ -99,8 +128,13 @@
 
   function attach() {
     // Attach to forms with either data-firebase-form-endpoint or action attribute
-    document.querySelectorAll("form[data-firebase-form-endpoint], form[action]").forEach((form) => {
+    const forms = document.querySelectorAll("form[data-firebase-form-endpoint], form[action]");
+    console.log("[Firebase Form] Found", forms.length, "forms");
+    
+    forms.forEach((form) => {
       const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
+      console.log("[Firebase Form] Checking form with endpoint:", endpoint);
+      
       // Only attach if endpoint looks like our API endpoint
       if (endpoint && endpoint.includes("/api/f/")) {
         // Remove any existing listeners to prevent duplicates
@@ -109,6 +143,9 @@
         form.addEventListener("submit", handleSubmit, { capture: true });
         // Also prevent default on form element
         form.setAttribute("data-firebase-handled", "true");
+        console.log("[Firebase Form] Attached handler to form");
+      } else {
+        console.log("[Firebase Form] Skipping form - endpoint doesn't match /api/f/");
       }
     });
   }

@@ -218,11 +218,199 @@ app.post("/api/f/:formId", async (req, res) => {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===\n");
 
-    // Always return JSON so the frontend can show toast/snackbar without navigation
-    return res.json({ success: true, message: "Form submitted successfully", data: cleanData });
+    const htmlAccepted = req.headers.accept?.includes("text/html");
+
+    if (htmlAccepted) {
+      // Return HTML page with toast that auto-goes back after 4 seconds
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Form Submitted</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: Arial, sans-serif;
+                background: #f5f5f5;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+              }
+              .toast-container {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                animation: slideIn 0.3s ease-out;
+              }
+              @keyframes slideIn {
+                from {
+                  transform: translateX(400px);
+                  opacity: 0;
+                }
+                to {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+              }
+              .toast {
+                background: #e8f5e9;
+                color: #166534;
+                padding: 16px 20px;
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                max-width: 320px;
+                font-size: 14px;
+                line-height: 1.5;
+                border-left: 4px solid #4caf50;
+              }
+              .toast.error {
+                background: #fee2e2;
+                color: #991b1b;
+                border-left-color: #f44336;
+              }
+              .toast-icon {
+                font-size: 20px;
+                margin-right: 8px;
+                display: inline-block;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="toast-container">
+              <div class="toast" id="toast">
+                <span class="toast-icon">✓</span>
+                <span id="toast-message">Form submitted successfully!</span>
+              </div>
+            </div>
+            <script>
+              // Show toast
+              const toast = document.getElementById('toast');
+              const message = document.getElementById('toast-message');
+              message.textContent = 'Form submitted successfully!';
+              
+              // Auto go back after 4 seconds
+              setTimeout(() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  // If no history, try to go to referer or close
+                  const referer = '${req.headers.referer || '/'}';
+                  if (referer && referer !== window.location.href) {
+                    window.location.href = referer;
+                  }
+                }
+              }, 4000);
+              
+              // Fade out before going back
+              setTimeout(() => {
+                toast.style.transition = 'opacity 0.3s';
+                toast.style.opacity = '0';
+              }, 3500);
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    // Return JSON for AJAX/fetch requests (with script tag)
+    return res.json({ success: true, message: "Form submitted successfully!", data: cleanData });
   } catch (err) {
     console.error("❌ Error submitting form:", err);
     console.error("Error stack:", err.stack);
+    
+    const htmlAccepted = req.headers.accept?.includes("text/html");
+    
+    if (htmlAccepted) {
+      // Return HTML error page with toast
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Submission Error</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: Arial, sans-serif;
+                background: #f5f5f5;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+              }
+              .toast-container {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                animation: slideIn 0.3s ease-out;
+              }
+              @keyframes slideIn {
+                from {
+                  transform: translateX(400px);
+                  opacity: 0;
+                }
+                to {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+              }
+              .toast {
+                background: #fee2e2;
+                color: #991b1b;
+                padding: 16px 20px;
+                border-radius: 8px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                max-width: 320px;
+                font-size: 14px;
+                line-height: 1.5;
+                border-left: 4px solid #f44336;
+              }
+              .toast-icon {
+                font-size: 20px;
+                margin-right: 8px;
+                display: inline-block;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="toast-container">
+              <div class="toast" id="toast">
+                <span class="toast-icon">✗</span>
+                <span id="toast-message">Error: ${err.message}</span>
+              </div>
+            </div>
+            <script>
+              const toast = document.getElementById('toast');
+              const message = document.getElementById('toast-message');
+              message.textContent = 'Error: ${err.message.replace(/'/g, "\\'")}';
+              
+              setTimeout(() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  const referer = '${req.headers.referer || '/'}';
+                  if (referer && referer !== window.location.href) {
+                    window.location.href = referer;
+                  }
+                }
+              }, 4000);
+              
+              setTimeout(() => {
+                toast.style.transition = 'opacity 0.3s';
+                toast.style.opacity = '0';
+              }, 3500);
+            </script>
+          </body>
+        </html>
+      `);
+    }
+    
     return res.status(500).json({ error: err.message });
   }
 });

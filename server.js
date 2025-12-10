@@ -66,7 +66,7 @@ app.use((req, res, next) => {
 });
 
 // -------------------------
-// POST FORM ROUTE
+// POST FORM ROUTE (NO HTML RESPONSE)
 // -------------------------
 app.post("/api/f/:formId", async (req, res) => {
   const { formId } = req.params;
@@ -103,123 +103,29 @@ app.post("/api/f/:formId", async (req, res) => {
 
     console.log("Saved form submission:", docRef.id);
 
-    const htmlAccepted = req.headers.accept?.includes("text/html");
-
-    // -------------------------
-    // SUCCESS RESPONSE (NO NAVIGATION)
-    // -------------------------
-    if (htmlAccepted) {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Submitted</title>
-            <style>
-                body {
-                    font-family: Arial;
-                    background: #f5f5f5;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                }
-                .toast {
-                    background: #e8f5e9;
-                    color: #166534;
-                    padding: 16px 20px;
-                    border-radius: 8px;
-                    border-left: 4px solid #4caf50;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                    font-size: 15px;
-                    animation: fadeIn 0.3s ease-out;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(-20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="toast">Form submitted successfully!</div>
-
-            <script>
-                // Only toast — NO REDIRECT
-                setTimeout(() => {
-                    document.querySelector('.toast').style.opacity = "0";
-                }, 3500);
-            </script>
-        </body>
-        </html>
-      `);
-    }
-
+    // ONLY JSON — NO HTML PAGE, NO REDIRECT
     return res.json({
       success: true,
       message: "Form submitted successfully!",
       data: cleanData,
     });
+
   } catch (err) {
     console.error("❌ Error:", err);
-
-    const htmlAccepted = req.headers.accept?.includes("text/html");
-
-    // -------------------------
-    // ERROR RESPONSE (NO NAVIGATION)
-    // -------------------------
-    if (htmlAccepted) {
-      return res.status(500).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Error</title>
-            <style>
-                body {
-                    font-family: Arial;
-                    background: #f5f5f5;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                }
-                .toast {
-                    background: #fee2e2;
-                    color: #991b1b;
-                    padding: 16px 20px;
-                    border-radius: 8px;
-                    border-left: 4px solid #f44336;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-                    font-size: 15px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="toast">Error: ${err.message}</div>
-
-            <script>
-                // Only toast — NO REDIRECT
-                setTimeout(() => {
-                    document.querySelector('.toast').style.opacity = "0";
-                }, 3500);
-            </script>
-        </body>
-        </html>
-      `);
-    }
 
     return res.status(500).json({ error: err.message });
   }
 });
 
-// -------------------------
+
 // GET ROUTE
-// -------------------------
 app.get("/api/f/:formId", (req, res) => {
   res.send("POST only. Use this endpoint inside an HTML form.");
 });
 
-// -------------------------
+
 // SERVE REACT APP IN PRODUCTION
-// -------------------------
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "build")));
   app.get("*", (req, res) => {

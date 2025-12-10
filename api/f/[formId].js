@@ -147,7 +147,12 @@ export default async function handler(req, res) {
   // Set CORS headers to allow cross-origin form submissions
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Type");
+  // Add cache control to ensure request shows in network tab
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
@@ -310,8 +315,10 @@ export default async function handler(req, res) {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===");
 
-    // Check if request expects HTML response (standard form submission without script tag)
-    const acceptsHtml = req.headers.accept?.includes("text/html");
+    // Always return JSON if Accept: application/json is present (for AJAX/fetch requests)
+    // This ensures the request shows up in the network tab
+    const acceptsJson = req.headers.accept?.includes("application/json");
+    const acceptsHtml = req.headers.accept?.includes("text/html") && !acceptsJson;
     
     if (acceptsHtml) {
       // Return HTML page with toast that auto-redirects

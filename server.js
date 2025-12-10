@@ -153,7 +153,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Type");
+  // Add cache control to ensure request shows in network tab
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
@@ -218,7 +223,10 @@ app.post("/api/f/:formId", async (req, res) => {
     console.log("✅ Successfully saved submission with ID:", docRef.id);
     console.log("=== End Debug ===\n");
 
-    const acceptsHtml = req.headers.accept?.includes("text/html");
+    // Always return JSON if Accept: application/json is present (for AJAX/fetch requests)
+    // This ensures the request shows up in the network tab
+    const acceptsJson = req.headers.accept?.includes("application/json");
+    const acceptsHtml = req.headers.accept?.includes("text/html") && !acceptsJson;
     const referer = req.headers.referer || "#";
 
     if (acceptsHtml) {

@@ -7,6 +7,7 @@
   // <script src="/embed-form.js"></script>
 
   const TOAST_ID = "__firebase_form_toast__";
+  const FORMS_ATTACHED = new WeakSet();
 
   function ensureToastContainer() {
     let t = document.getElementById(TOAST_ID);
@@ -47,9 +48,15 @@
     const form = e.target;
     // Check both data attribute and action attribute
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-    if (!endpoint) return; // Not our form
+    if (!endpoint || !endpoint.includes("/api/f/")) {
+      // Not our form, let it submit normally
+      return;
+    }
 
+    // Prevent default form submission (navigation)
     e.preventDefault();
+    e.stopPropagation();
+
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -59,19 +66,31 @@
 
     try {
       const body = new URLSearchParams(new FormData(form)).toString();
+      
+      // Log to console for debugging (visible in network tab)
+      console.log("🚀 Submitting form to:", endpoint);
+      
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
+          "Accept": "application/json",
         },
         body,
+        // Ensure request is visible in network tab
+        credentials: "omit",
+        cache: "no-cache",
       });
+
+      // Log response for debugging
+      console.log("✅ Form submission response:", res.status, res.statusText);
+
       const json = await res.json();
       const ok = res.ok;
-      showToast(ok ? json.message || "Submitted!" : json.error || json.message || "Failed", ok);
+      showToast(ok ? json.message || json.success || "Submitted!" : json.error || json.message || "Failed", ok);
       if (ok) form.reset();
     } catch (err) {
+      console.error("❌ Form submission error:", err);
       showToast("Network error: " + err.message, false);
     } finally {
       if (submitBtn) {
@@ -81,23 +100,63 @@
     }
   }
 
+  function attachToForm(form) {
+    // Skip if already attached
+    if (FORMS_ATTACHED.has(form)) return;
+
+    const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
+    // Only attach if endpoint looks like our API endpoint
+    if (endpoint && endpoint.includes("/api/f/")) {
+      form.addEventListener("submit", handleSubmit, { capture: true });
+      FORMS_ATTACHED.add(form);
+      console.log("✅ Form handler attached to:", endpoint);
+    }
+  }
+
   function attach() {
-    // Attach to forms with either data-firebase-form-endpoint or action attribute
-    document.querySelectorAll("form[data-firebase-form-endpoint], form[action]").forEach((form) => {
-      const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-      // Only attach if endpoint looks like our API endpoint
-      if (endpoint && endpoint.includes("/api/f/")) {
-        form.removeEventListener("submit", handleSubmit);
-        form.addEventListener("submit", handleSubmit);
-      }
+    // Attach to all existing forms
+    document.querySelectorAll("form").forEach(attachToForm);
+  }
+
+  // Watch for dynamically added forms
+  function setupMutationObserver() {
+    if (typeof MutationObserver === "undefined") return;
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            // Check if the added node is a form
+            if (node.tagName === "FORM") {
+              attachToForm(node);
+            }
+            // Check for forms inside the added node
+            if (node.querySelectorAll) {
+              node.querySelectorAll("form").forEach(attachToForm);
+            }
+          }
+        });
+      });
+    });
+
+    observer.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true,
     });
   }
 
-  // Run now and on DOM ready
+  // Initialize
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", attach);
+    document.addEventListener("DOMContentLoaded", () => {
+      attach();
+      setupMutationObserver();
+    });
   } else {
     attach();
+    setupMutationObserver();
   }
+
+  // Also attach immediately for forms that might already exist
+  attach();
 })();
 

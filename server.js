@@ -221,7 +221,10 @@ app.post("/api/f/:formId", async (req, res) => {
     const htmlAccepted = req.headers.accept?.includes("text/html");
 
     if (htmlAccepted) {
-      // Return HTML page with toast that auto-goes back after 4 seconds
+      // Return HTML page that immediately goes back and shows toast
+      const referer = req.headers.referer || '/';
+      const message = 'Form submitted successfully!';
+      
       return res.send(`
         <!DOCTYPE html>
         <html>
@@ -287,29 +290,45 @@ app.post("/api/f/:formId", async (req, res) => {
               </div>
             </div>
             <script>
-              // Show toast
+              // Store message in localStorage for parent page
+              try {
+                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
+                  message: '${message}',
+                  success: true,
+                  timestamp: Date.now()
+                }));
+              } catch(e) {}
+              
+              // Show toast briefly
               const toast = document.getElementById('toast');
-              const message = document.getElementById('toast-message');
-              message.textContent = 'Form submitted successfully!';
               
-              // Auto go back after 4 seconds
-              setTimeout(() => {
-                if (window.history.length > 1) {
+              // Immediately try to go back (no delay)
+              if (window.history.length > 1) {
+                // Show toast for 0.1 seconds then go back
+                setTimeout(() => {
                   window.history.back();
-                } else {
-                  // If no history, try to go to referer or close
-                  const referer = '${req.headers.referer || '/'}';
-                  if (referer && referer !== window.location.href) {
+                }, 100);
+              } else {
+                // If no history, redirect to referer
+                const referer = '${referer}';
+                if (referer && referer !== window.location.href) {
+                  setTimeout(() => {
                     window.location.href = referer;
-                  }
+                  }, 100);
+                } else {
+                  // Show toast for 4 seconds if can't go back
+                  setTimeout(() => {
+                    toast.style.transition = 'opacity 0.3s';
+                    toast.style.opacity = '0';
+                  }, 3500);
                 }
-              }, 4000);
+              }
               
-              // Fade out before going back
+              // Auto-hide toast after going back (in case back doesn't work)
               setTimeout(() => {
                 toast.style.transition = 'opacity 0.3s';
                 toast.style.opacity = '0';
-              }, 3500);
+              }, 4000);
             </script>
           </body>
         </html>

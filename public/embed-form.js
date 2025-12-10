@@ -49,7 +49,10 @@
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
     if (!endpoint) return; // Not our form
 
+    // CRITICAL: Prevent default form submission (no navigation)
     e.preventDefault();
+    e.stopPropagation();
+    
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -63,14 +66,27 @@
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
+          Accept: "application/json", // Request JSON to prevent HTML response
         },
         body,
       });
       const json = await res.json();
       const ok = res.ok;
-      showToast(ok ? json.message || "Submitted!" : json.error || json.message || "Failed", ok);
-      if (ok) form.reset();
+      
+      // Show toast message
+      showToast(ok ? json.message || "Form submitted successfully!" : json.error || json.message || "Failed", ok);
+      
+      // Reset form after successful submission
+      if (ok) {
+        form.reset();
+        // Reset all form fields including checkboxes and radio buttons
+        form.querySelectorAll("input[type=checkbox], input[type=radio]").forEach(input => {
+          input.checked = false;
+        });
+        form.querySelectorAll("select").forEach(select => {
+          select.selectedIndex = 0;
+        });
+      }
     } catch (err) {
       showToast("Network error: " + err.message, false);
     } finally {
@@ -87,9 +103,25 @@
       const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
       // Only attach if endpoint looks like our API endpoint
       if (endpoint && endpoint.includes("/api/f/")) {
+        // Remove any existing listeners to prevent duplicates
         form.removeEventListener("submit", handleSubmit);
-        form.addEventListener("submit", handleSubmit);
+        // Add our handler
+        form.addEventListener("submit", handleSubmit, { capture: true });
+        // Also prevent default on form element
+        form.setAttribute("data-firebase-handled", "true");
       }
+    });
+  }
+  
+  // Also handle dynamically added forms
+  const observer = new MutationObserver(() => {
+    attach();
+  });
+  
+  if (document.body) {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
     });
   }
 

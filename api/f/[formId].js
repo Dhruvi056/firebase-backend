@@ -314,7 +314,10 @@ export default async function handler(req, res) {
     const acceptsHtml = req.headers.accept?.includes("text/html");
     
     if (acceptsHtml) {
-      // Return HTML page with toast that auto-goes back after 4 seconds
+      // Return HTML page that immediately goes back and shows toast on parent page
+      const referer = req.headers.referer || '/';
+      const message = 'Form submitted successfully!';
+      
       return res.status(200).send(`
         <!DOCTYPE html>
         <html>
@@ -326,7 +329,7 @@ export default async function handler(req, res) {
               * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
                 font-family: Arial, sans-serif;
-                background: #f5f5f5;
+                background: transparent;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -336,8 +339,8 @@ export default async function handler(req, res) {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                z-index: 9999;
-                animation: slideIn 0.3s ease-out;
+                z-index: 99999;
+                animation: slideIn 0.2s ease-out;
               }
               @keyframes slideIn {
                 from {
@@ -360,11 +363,6 @@ export default async function handler(req, res) {
                 line-height: 1.5;
                 border-left: 4px solid #4caf50;
               }
-              .toast.error {
-                background: #fee2e2;
-                color: #991b1b;
-                border-left-color: #f44336;
-              }
               .toast-icon {
                 font-size: 20px;
                 margin-right: 8px;
@@ -376,33 +374,49 @@ export default async function handler(req, res) {
             <div class="toast-container">
               <div class="toast" id="toast">
                 <span class="toast-icon">✓</span>
-                <span id="toast-message">Form submitted successfully!</span>
+                <span id="toast-message">${message}</span>
               </div>
             </div>
             <script>
-              // Show toast
+              // Store message in localStorage for parent page
+              try {
+                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
+                  message: '${message}',
+                  success: true,
+                  timestamp: Date.now()
+                }));
+              } catch(e) {}
+              
+              // Show toast briefly
               const toast = document.getElementById('toast');
-              const message = document.getElementById('toast-message');
-              message.textContent = 'Form submitted successfully!';
               
-              // Auto go back after 4 seconds
-              setTimeout(() => {
-                if (window.history.length > 1) {
+              // Immediately try to go back (no delay)
+              if (window.history.length > 1) {
+                // Show toast for 0.1 seconds then go back
+                setTimeout(() => {
                   window.history.back();
-                } else {
-                  // If no history, try to go to referer or close
-                  const referer = '${req.headers.referer || '/'}';
-                  if (referer && referer !== window.location.href) {
+                }, 100);
+              } else {
+                // If no history, redirect to referer
+                const referer = '${referer}';
+                if (referer && referer !== window.location.href) {
+                  setTimeout(() => {
                     window.location.href = referer;
-                  }
+                  }, 100);
+                } else {
+                  // Show toast for 4 seconds if can't go back
+                  setTimeout(() => {
+                    toast.style.transition = 'opacity 0.3s';
+                    toast.style.opacity = '0';
+                  }, 3500);
                 }
-              }, 4000);
+              }
               
-              // Fade out before going back
+              // Auto-hide toast after going back (in case back doesn't work)
               setTimeout(() => {
                 toast.style.transition = 'opacity 0.3s';
                 toast.style.opacity = '0';
-              }, 3500);
+              }, 4000);
             </script>
           </body>
         </html>
@@ -423,7 +437,9 @@ export default async function handler(req, res) {
     const acceptsHtml = req.headers.accept?.includes("text/html");
     
     if (acceptsHtml) {
-      // Return HTML error page with toast
+      const referer = req.headers.referer || '/';
+      const errorMsg = e.message.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      
       return res.status(500).send(`
         <!DOCTYPE html>
         <html>
@@ -435,7 +451,7 @@ export default async function handler(req, res) {
               * { margin: 0; padding: 0; box-sizing: border-box; }
               body {
                 font-family: Arial, sans-serif;
-                background: #f5f5f5;
+                background: transparent;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -445,8 +461,8 @@ export default async function handler(req, res) {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                z-index: 9999;
-                animation: slideIn 0.3s ease-out;
+                z-index: 99999;
+                animation: slideIn 0.2s ease-out;
               }
               @keyframes slideIn {
                 from {
@@ -480,29 +496,44 @@ export default async function handler(req, res) {
             <div class="toast-container">
               <div class="toast" id="toast">
                 <span class="toast-icon">✗</span>
-                <span id="toast-message">Error: ${e.message}</span>
+                <span id="toast-message">Error: ${errorMsg}</span>
               </div>
             </div>
             <script>
-              const toast = document.getElementById('toast');
-              const message = document.getElementById('toast-message');
-              message.textContent = 'Error: ${e.message.replace(/'/g, "\\'")}';
+              // Store error message in localStorage
+              try {
+                localStorage.setItem('__firebase_form_toast__', JSON.stringify({
+                  message: 'Error: ${errorMsg}',
+                  success: false,
+                  timestamp: Date.now()
+                }));
+              } catch(e) {}
               
-              setTimeout(() => {
-                if (window.history.length > 1) {
+              const toast = document.getElementById('toast');
+              
+              // Immediately try to go back
+              if (window.history.length > 1) {
+                setTimeout(() => {
                   window.history.back();
-                } else {
-                  const referer = '${req.headers.referer || '/'}';
-                  if (referer && referer !== window.location.href) {
+                }, 100);
+              } else {
+                const referer = '${referer}';
+                if (referer && referer !== window.location.href) {
+                  setTimeout(() => {
                     window.location.href = referer;
-                  }
+                  }, 100);
+                } else {
+                  setTimeout(() => {
+                    toast.style.transition = 'opacity 0.3s';
+                    toast.style.opacity = '0';
+                  }, 3500);
                 }
-              }, 4000);
+              }
               
               setTimeout(() => {
                 toast.style.transition = 'opacity 0.3s';
                 toast.style.opacity = '0';
-              }, 3500);
+              }, 4000);
             </script>
           </body>
         </html>

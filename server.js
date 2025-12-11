@@ -175,41 +175,41 @@ app.post("/api/f/:formId", async (req, res) => {
 
     const htmlAccepted = req.headers.accept?.includes("text/html");
 
-    if (htmlAccepted) {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Form Submitted Successfully</title>
-            <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
-            <style>
-              body { 
-                font-family: Arial, sans-serif; 
-                max-width: 600px; 
-                margin: 100px auto; 
-                padding: 20px;
-                text-align: center;
-              }
-              .success { 
-                color: #2e7d32; 
-                background: #e8f5e9; 
-                padding: 30px; 
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              .success h1 { margin-top: 0; }
-              .success p { color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="success">
-              <h1>✓ Form Submitted Successfully!</h1>
-              <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
-            </div>
-          </body>
-        </html>
-      `);
-    }
+    // if (htmlAccepted) {
+    //   return res.send(`
+    //     <!DOCTYPE html>
+    //     <html>
+    //       <head>
+    //         <title>Form Submitted Successfully</title>
+    //         <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
+    //         <style>
+    //           body { 
+    //             font-family: Arial, sans-serif; 
+    //             max-width: 600px; 
+    //             margin: 100px auto; 
+    //             padding: 20px;
+    //             text-align: center;
+    //           }
+    //           .success { 
+    //             color: #2e7d32; 
+    //             background: #e8f5e9; 
+    //             padding: 30px; 
+    //             border-radius: 10px;
+    //             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    //           }
+    //           .success h1 { margin-top: 0; }
+    //           .success p { color: #555; }
+    //         </style>
+    //       </head>
+    //       <body>
+    //         <div class="success">
+    //           <h1>✓ Form Submitted Successfully!</h1>
+    //           <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
+    //         </div>
+    //       </body>
+    //     </html>
+    //   `);
+    // }
 
     return res.json({ success: true, data: cleanData });
   } catch (err) {
@@ -222,12 +222,12 @@ app.post("/api/f/:formId", async (req, res) => {
 // -------------------------
 // GET FORM ROUTE
 // -------------------------
-app.get("/api/f/:formId", (req, res) => {
-  res.send(`
-    <h1>POST only</h1>
-    <p>Use this endpoint inside HTML form</p>
-  `);
-});
+// app.get("/api/f/:formId", (req, res) => {
+//   res.send(`
+//     <h1>POST only</h1>
+//     <p>Use this endpoint inside HTML form</p>
+//   `);
+// });
 
 // -------------------------
 // SERVE REACT IN PRODUCTION

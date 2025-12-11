@@ -268,42 +268,42 @@ export default async function handler(req, res) {
     // Check if request expects HTML response (standard form submission)
     const acceptsHtml = req.headers.accept?.includes("text/html");
     
-    if (acceptsHtml) {
-      // Return HTML success page for standard form submissions
-      return res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Form Submitted Successfully</title>
-            <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
-            <style>
-              body { 
-                font-family: Arial, sans-serif; 
-                max-width: 600px; 
-                margin: 100px auto; 
-                padding: 20px;
-                text-align: center;
-              }
-              .success { 
-                color: #2e7d32; 
-                background: #e8f5e9; 
-                padding: 30px; 
-                border-radius: 10px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              .success h1 { margin-top: 0; }
-              .success p { color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="success">
-              <h1>✓ Form Submitted Successfully!</h1>
-              <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
-            </div>
-          </body>
-        </html>
-      `);
-    }
+    // if (acceptsHtml) {
+    //   // Return HTML success page for standard form submissions
+    //   return res.status(200).send(`
+    //     <!DOCTYPE html>
+    //     <html>
+    //       <head>
+    //         <title>Form Submitted Successfully</title>
+    //         <meta http-equiv="refresh" content="3;url=${req.headers.referer || '#'}" />
+    //         <style>
+    //           body { 
+    //             font-family: Arial, sans-serif; 
+    //             max-width: 600px; 
+    //             margin: 100px auto; 
+    //             padding: 20px;
+    //             text-align: center;
+    //           }
+    //           .success { 
+    //             color: #2e7d32; 
+    //             background: #e8f5e9; 
+    //             padding: 30px; 
+    //             border-radius: 10px;
+    //             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    //           }
+    //           .success h1 { margin-top: 0; }
+    //           .success p { color: #555; }
+    //         </style>
+    //       </head>
+    //       <body>
+    //         <div class="success">
+    //           <h1>✓ Form Submitted Successfully!</h1>
+    //           <p>Thank you for your submission. You will be redirected in 3 seconds...</p>
+    //         </div>
+    //       </body>
+    //     </html>
+    //   `);
+    // }
 
     // Return JSON response for AJAX/fetch requests
     return res.status(200).json({

@@ -58,7 +58,11 @@ const PORT = process.env.PORT || 3000;
 let db;
 
 if (!admin.apps.length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  if (privateKey) {
+    // Replace escaped newlines (\\n) with actual newlines (\n)
+    privateKey = privateKey.replace(/\\n/g, "\n");
+  }
 
   admin.initializeApp({
     credential: admin.credential.cert({

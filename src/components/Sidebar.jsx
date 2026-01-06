@@ -2,6 +2,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import AddFormPopup from "./AddFormPopup.jsx";
 
 export default function Sidebar({ onSelectForm, selectedForm }) {
@@ -11,6 +12,7 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
   const [expandedFolders, setExpandedFolders] = useState({});
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const { currentUser, logout } = useAuth();
+  const { addToast } = useToast();
 
   // Close logout menu when clicking outside
   useEffect(() => {
@@ -221,9 +223,11 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
               onClick={async () => {
                 try {
                   await logout();
+                  addToast('Logged out successfully!', 'info');
                   setShowLogoutMenu(false);
                 } catch (error) {
                   console.error("Failed to logout:", error);
+                  addToast('Failed to log out', 'error');
                 }
               }}
               className="w-full text-left px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-sm font-semibold"

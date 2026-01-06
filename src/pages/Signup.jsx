@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuthWithToast } from "../hooks/useAuthWithToast";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function Signup() {
@@ -8,7 +8,7 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signup } = useAuth();
+  const { signup } = useAuthWithToast();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {

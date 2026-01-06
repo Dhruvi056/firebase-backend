@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuthWithToast } from "../hooks/useAuthWithToast";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function Login() {
@@ -7,7 +7,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login } = useAuthWithToast();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {

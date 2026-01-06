@@ -3,13 +3,13 @@ export function getFormUrl(formId) {
 
   if (vercelUrl) {
     const cleanUrl = vercelUrl.replace(/^https?:\/\//, "");
-    return `https://${cleanUrl}/api/f/${formId}`;
+    return `https://${cleanUrl}/forms/${formId}`;
   }
 
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/api/f/${formId}`;
+    return `${window.location.origin}/forms/${formId}`;
   }
 
   const baseUrl = process.env.REACT_APP_BASE_URL || "http://localhost:3000";
-  return `${baseUrl}/api/f/${formId}`;
+  return `${baseUrl}/forms/${formId}`;
 }

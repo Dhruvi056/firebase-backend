@@ -5,11 +5,15 @@
   "devCommand": "npm start",
   "framework": "create-react-app",
   "functions": {
-    "api/f/[formId].js": {
+    "api/forms/[formId].js": {
       "maxDuration": 10
     }
   },
   "rewrites": [
+    {
+      "source": "/forms/:formId",
+      "destination": "/api/forms/:formId"
+    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"

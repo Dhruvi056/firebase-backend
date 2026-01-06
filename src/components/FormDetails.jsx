@@ -1,4 +1,3 @@
-// src/components/FormDetails.jsx
 import { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
@@ -12,7 +11,6 @@ export default function FormDetails({ form }) {
     console.log("FormDetails: Loading submissions for formId:", form.formId);
     const ref = collection(db, `forms/${form.formId}/submissions`);
     
-    // Try with orderBy, but handle errors if submittedAt doesn't exist
     let q;
     try {
       q = query(ref, orderBy("submittedAt", "desc"));
@@ -95,7 +93,6 @@ export default function FormDetails({ form }) {
                   <tr key={sub.id} className="border-t hover:bg-gray-50">
                     {fields.map((f) => {
                       const value = sub.data?.[f];
-                      // Handle arrays, objects, and other types
                       let displayValue = "-";
                       if (value !== undefined && value !== null && value !== "") {
                         if (Array.isArray(value)) {

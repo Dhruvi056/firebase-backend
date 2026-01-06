@@ -23,7 +23,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
       query(collection(db, "folders"), where("userId", "==", currentUser.uid)),
       (snap) => {
         const arr = [];
-        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+        snap.forEach((doc) => arr.push({ id: doc.id, ...doc.data() }));
         setFolders(arr);
       }
     );
@@ -37,27 +37,41 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         return;
       }
 
+      if (!selectedFolder) {
+        alert("Please select a folder for your form");
+        return;
+      }
+
       const id = generateFormId();
       const formUrl = getFormUrl(id);
-
+      
       const newForm = {
         name: formName.trim(),
         formId: id,
         url: formUrl,
-        folderId: selectedFolder || null,
+        folderId: selectedFolder, // यहाँ folderId document ID के रूप में save हो रहा है
         timezone: timezone || null,
         userId: currentUser.uid,
         createdAt: serverTimestamp(),
       };
 
-      await setDoc(doc(collection(db, "forms"), id), newForm);
+      console.log("Creating form with data:", newForm);
+      
+      try {
+        await setDoc(doc(collection(db, "forms"), id), newForm);
+        console.log("Form created successfully");
 
-      if (onSelectForm) {
-        onSelectForm({
-          name: formName.trim(),
-          formId: id,
-          url: formUrl,
-        });
+        if (onSelectForm) {
+          onSelectForm({
+            name: formName.trim(),
+            formId: id,
+            url: formUrl,
+            folderId: selectedFolder, // यह भी पास करें
+          });
+        }
+      } catch (error) {
+        console.error("Error creating form:", error);
+        alert("Error creating form: " + error.message);
       }
     } else {
       // Folder creation
@@ -69,12 +83,19 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
       const folderId = generateFormId();
       const newFolder = {
         name: folderName.trim(),
-        folderId: folderId,
         userId: currentUser.uid,
         createdAt: serverTimestamp(),
       };
 
-      await setDoc(doc(collection(db, "folders"), folderId), newFolder);
+      console.log("Creating folder with data:", newFolder);
+      
+      try {
+        await setDoc(doc(collection(db, "folders"), folderId), newFolder);
+        console.log("Folder created successfully");
+      } catch (error) {
+        console.error("Error creating folder:", error);
+        alert("Error creating folder: " + error.message);
+      }
     }
 
     onClose();
@@ -120,26 +141,25 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
 
             <div className="space-y-4">
               {/* Folder Dropdown */}
-              {folders.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-2">
-                    Folder
-                  </label>
-                  <select
-                    value={selectedFolder}
-                    onChange={(e) => setSelectedFolder(e.target.value)}
-                    className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-                  >
-                    <option value="">Select Folder (Optional)</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-800 mb-2">
+                  Folder
+                </label>
+                <select
+                  value={selectedFolder}
+                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                  required
+                >
+                  <option value="">Select a Folder (required)</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {/* Form Endpoint Name */}
               <div>
@@ -153,34 +173,9 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                   placeholder="Form Endpoint Name (e.g. job-application)"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
+                  required
                 />
               </div>
-
-              {/* Timezone Dropdown */}
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">
-                  Timezone
-                </label>
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-                >
-                  <option value="">Select Timezone</option>
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">America/New_York (EST)</option>
-                  <option value="America/Chicago">America/Chicago (CST)</option>
-                  <option value="America/Denver">America/Denver (MST)</option>
-                  <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
-                  <option value="Europe/London">Europe/London (GMT)</option>
-                  <option value="Europe/Paris">Europe/Paris (CET)</option>
-                  <option value="Asia/Dubai">Asia/Dubai (GST)</option>
-                  <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-                  <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-                  <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
-                </select>
-              </div> */}
             </div>
           </>
         )}
@@ -204,6 +199,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                   placeholder="Folder Name (e.g. job-application)"
                   value={folderName}
                   onChange={(e) => setFolderName(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -224,7 +220,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
             className="px-6 py-2.5 rounded-2xl bg-blue-600 text-white text-sm font-semibold 
             hover:bg-blue-700 disabled:bg-blue-300 transition"
             onClick={handleCreate}
-            disabled={activeTab === "Form" ? !formName.trim() : !folderName.trim()}
+            disabled={activeTab === "Form" ? !formName.trim() || !selectedFolder : !folderName.trim()}
           >
             Create
           </button>

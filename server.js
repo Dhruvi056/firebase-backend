@@ -7,6 +7,51 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ---------------------------------------------------------------------------
+// Client-side usage (example toast submission snippet)
+// This runs in the browser, NOT on the server. Paste into your HTML page.
+//
+// <script>
+// async function submitForm(event) {
+//   event.preventDefault();
+//   const form = event.target;
+//   const data = new URLSearchParams(new FormData(form)).toString();
+//   try {
+//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//         "Accept": "application/json"
+//       },
+//       body: data
+//     });
+//     const json = await res.json();
+//     const ok = res.ok;
+//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
+//     if (ok) form.reset();
+//   } catch (err) {
+//     showToast("Network error: " + err.message, false);
+//   }
+// }
+//
+// function showToast(msg, success) {
+//   const toast = document.createElement("div");
+//   toast.textContent = msg;
+//   toast.style.position = "fixed";
+//   toast.style.top = "20px";
+//   toast.style.right = "20px";
+//   toast.style.padding = "12px 16px";
+//   toast.style.borderRadius = "8px";
+//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
+//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
+//   toast.style.color = success ? "#166534" : "#991b1b";
+//   toast.style.zIndex = "9999";
+//   document.body.appendChild(toast);
+//   setTimeout(() => toast.remove(), 4000);
+// }
+// </script>
+// ---------------------------------------------------------------------------
+
 // -------------------------
 // INIT FIREBASE ADMIN
 // -------------------------
@@ -37,7 +82,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Type");
+  // Add cache control to ensure request shows in network tab
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
@@ -101,7 +151,6 @@ app.post("/forms/:formId", async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
-
 
 // SERVE REACT IN PRODUCTION
 

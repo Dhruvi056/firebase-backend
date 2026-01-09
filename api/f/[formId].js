@@ -107,7 +107,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Only POST requests allowed" });
   }
 
-  const formId = req.query.formId;
+  // Extract formId from query params (Vercel dynamic routes) or from URL path
+  const formId = req.query.formId || (req.url ? req.url.split('/').filter(Boolean).pop() : null);
   if (!formId) {
     return res.status(400).json({ error: "Missing formId" });
   }
@@ -121,26 +122,42 @@ export default async function handler(req, res) {
   try {
     // 1️ Parse Form Body
     const formData = parseBody(req);
+    
+    console.log("Received form data:", formData);
+    console.log("Form ID:", formId);
 
     if (!formData || Object.keys(formData).length === 0) {
+      console.error("No form data received");
       return res.status(400).json({
         error: "No form data received",
       });
     }
 
-    // 2️ Clean empty fields
+    // 2️ Clean empty fields (but keep fields with value 0, false, etc.)
     const cleanData = {};
     for (let key in formData) {
-      if (formData[key] !== "" && formData[key] !== null) {
+      // Skip empty strings, null, undefined, and the _gotcha field (honeypot)
+      if (formData[key] !== "" && formData[key] !== null && formData[key] !== undefined && key !== "_gotcha") {
         cleanData[key] = formData[key];
       }
     }
+    
+    if (Object.keys(cleanData).length === 0) {
+      console.error("All form fields were empty after cleaning");
+      return res.status(400).json({
+        error: "No valid form data to save",
+      });
+    }
+    
+    console.log("Cleaned data to save:", cleanData);
 
     // 3️ Save to Firestore
-    await db.collection(`forms/${formId}/submissions`).add({
+    const docRef = await db.collection(`forms/${formId}/submissions`).add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    
+    console.log("Successfully saved submission with ID:", docRef.id);
 
     // 4️ Response
     const acceptsHtml = req.headers.accept?.includes("text/html");
@@ -171,6 +188,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+    console.error("Error saving form submission:", error);
     return res.status(500).json({
       error: "Server error",
       message: error.message,

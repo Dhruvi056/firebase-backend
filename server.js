@@ -7,51 +7,6 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ---------------------------------------------------------------------------
-// Client-side usage (example toast submission snippet)
-// This runs in the browser, NOT on the server. Paste into your HTML page.
-//
-// <script>
-// async function submitForm(event) {
-//   event.preventDefault();
-//   const form = event.target;
-//   const data = new URLSearchParams(new FormData(form)).toString();
-//   try {
-//     const res = await fetch("https://<your-domain>/api/f/<formId>", {
-//       method: "POST",
-//       headers: {
-//         "Content-Type": "application/x-www-form-urlencoded",
-//         "Accept": "application/json"
-//       },
-//       body: data
-//     });
-//     const json = await res.json();
-//     const ok = res.ok;
-//     showToast(ok ? (json.message || "Submitted!") : (json.error || json.message || "Failed"), ok);
-//     if (ok) form.reset();
-//   } catch (err) {
-//     showToast("Network error: " + err.message, false);
-//   }
-// }
-//
-// function showToast(msg, success) {
-//   const toast = document.createElement("div");
-//   toast.textContent = msg;
-//   toast.style.position = "fixed";
-//   toast.style.top = "20px";
-//   toast.style.right = "20px";
-//   toast.style.padding = "12px 16px";
-//   toast.style.borderRadius = "8px";
-//   toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.15)";
-//   toast.style.background = success ? "#e8f5e9" : "#fee2e2";
-//   toast.style.color = success ? "#166534" : "#991b1b";
-//   toast.style.zIndex = "9999";
-//   document.body.appendChild(toast);
-//   setTimeout(() => toast.remove(), 4000);
-// }
-// </script>
-// ---------------------------------------------------------------------------
-
 // -------------------------
 // INIT FIREBASE ADMIN
 // -------------------------
@@ -82,45 +37,99 @@ if (!admin.apps.length) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS
+// CORS - Allow forms to work from anywhere (like Getform.io)
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
-  res.setHeader("Access-Control-Expose-Headers", "Content-Type");
-  // Add cache control to ensure request shows in network tab
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
 // -------------------------
+// ROUTES
+// -------------------------
+
+// GET FORM ROUTE
+app.get("/forms/:formId", (req, res) => {
+  const { formId } = req.params;
+  res.send(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>Form Endpoint</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+          }
+          .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          h1 { color: #333; margin-bottom: 20px; }
+          p { color: #666; line-height: 1.6; }
+          .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Form Endpoint Ready</h1>
+          <div class="info">
+            <p><strong>Form ID:</strong> ${formId}</p>
+            <p>This endpoint is ready to receive form submissions.</p>
+            <p>Use <code>action="/forms/${formId}"</code> and <code>method="POST"</code> in your form.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
+});
+
 // POST FORM ROUTE
 // -------------------------
 app.post("/forms/:formId", async (req, res) => {
   const { formId } = req.params;
 
   if (!formId) {
-    return res.status(400).json({ error: "Missing Form ID" });
+    return res.status(400).send(`
+      <!doctype html>
+      <html><body><script>alert('Error: Missing Form ID'); history.back();</script></body></html>
+    `);
   }
 
   if (!db) {
-    return res.status(500).json({ error: "Firebase not initialized" });
+    return res.status(500).send(`
+      <!doctype html>
+      <html><body><script>alert('Error: Server configuration issue'); history.back();</script></body></html>
+    `);
   }
 
   try {
     const cleanData = {};
-
     for (let key in req.body) {
-      if (req.body[key] !== "" && key !== "_gotcha") {
+      if (req.body[key] !== "" && req.body[key] !== null && req.body[key] !== undefined && key !== "_gotcha") {
         cleanData[key] = req.body[key];
       }
     }
 
     if (Object.keys(cleanData).length === 0) {
-      return res.status(400).json({ error: "No form data received" });
+      return res.status(400).send(`
+        <!doctype html>
+        <html><body><script>alert('Error: No form data received'); history.back();</script></body></html>
+      `);
     }
 
     await db.collection(`forms/${formId}/submissions`).add({
@@ -128,31 +137,28 @@ app.post("/forms/:formId", async (req, res) => {
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-
-    if (acceptsHtml) {
-      // Show an alert and return to the previous page so the user never leaves
-      return res.send(`
-        <!doctype html>
-        <html>
-          <body>
-            <script>
-              alert('Thank you! Your form was submitted.');
-              if (document.referrer) {
-                window.location.replace(document.referrer);
-              } else {
-                history.back();
-              }
-            </script>
-          </body>
-        </html>
-      `);
-    }
-
-    return res.json({ success: true, message: "Form submitted successfully", data: cleanData });
+    // Always return alert message (like Getform.io)
+    return res.send(`
+      <!doctype html>
+      <html>
+        <body>
+          <script>
+            alert('Thank you! Your form was submitted successfully.');
+            if (document.referrer) {
+              window.location.replace(document.referrer);
+            } else {
+              history.back();
+            }
+          </script>
+        </body>
+      </html>
+    `);
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).send(`
+      <!doctype html>
+      <html><body><script>alert('Error: ${err.message}'); history.back();</script></body></html>
+    `);
   }
 });
 
@@ -165,7 +171,7 @@ if (process.env.NODE_ENV === "production") {
   });
 } else {
   app.use(
-    /^\/(?!api).*/,
+    /^\/(?!api|forms).*/,
     createProxyMiddleware({
       target: "http://localhost:3001",
       changeOrigin: true,

@@ -15,7 +15,7 @@
       "destination": "/api/forms/:formId"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|forms/).*)",
       "destination": "/index.html"
     }
   ]

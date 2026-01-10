@@ -11,7 +11,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
   const [formName, setFormName] = useState("");
   const [folderName, setFolderName] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
-  const [timezone, setTimezone] = useState("");
+  //const [timezone, setTimezone] = useState("");
   const [folders, setFolders] = useState([]);
   const { currentUser } = useAuth();
 
@@ -50,7 +50,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         formId: id,
         url: formUrl,
         folderId: selectedFolder, // यहाँ folderId document ID के रूप में save हो रहा है
-        timezone: timezone || null,
+       // timezone: timezone || null,
         userId: currentUser.uid,
         createdAt: serverTimestamp(),
       };

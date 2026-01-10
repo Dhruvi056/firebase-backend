@@ -1,83 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
+<form action="http://localhost:3001/forms/7mca1jvs" method="POST" >
+  <input type="text" name="name">
+  <input type="email" name="email">
+  <input type="text" name="message">
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Form Submission Example</title>
-   
-</head>
+  <input type="hidden" name="_gotcha" style="display:none !important">
 
-<body>
-    <div class="form-container">
-        <h1>Contact Form Example</h1>
-        <form action="http://localhost:3001/forms/3ro8o0g6" method="POST">
+  <input type="checkbox" name="subscribe" value="yes" checked>
+  <input type="hidden" name="subscribe" value="no">
 
-            <div class="form-group">
-                <label for="name">Name *</label>
-                <input type="text" id="name" name="name" required placeholder="Enter your name" />
-            </div>
+  <input type="radio" name="gender" value="male" checked>
+  <input type="radio" name="gender" value="female">
+  <input type="radio" name="gender" value="other">
 
-            <div class="form-group">
-                <label for="email">Email *</label>
-                <input type="email" id="email" name="email" required placeholder="Enter your email" />
-            </div>
+  <select name="work-experience">
+    <option value="one-year">0-1 years</option>
+    <option value="one-five-years">1-5 years</option>
+  </select>
 
-            <div class="form-group">
-                <label for="message">Message</label>
-                <textarea id="message" name="message" placeholder="Enter your message"></textarea>
-            </div>
-
-            <div class="form-group">
-                <label>Subscribe to Newsletter</label>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="subscribe" name="subscribe" value="yes" />
-                    <label for="subscribe" style="font-weight: normal; margin: 0;">Yes, I want to receive
-                        newsletters</label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Gender</label>
-                <div class="radio-group">
-                    <label>
-                        <input type="radio" name="gender" value="male" />
-                        Male
-                    </label>
-                    <label>
-                        <input type="radio" name="gender" value="female" />
-                        Female
-                    </label>
-                    <label>
-                        <input type="radio" name="gender" value="other" />
-                        Other
-                    </label>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="work-experience">Work Experience</label>
-                <select id="work-experience" name="work-experience">
-                    <option value="">Select experience</option>
-                    <option value="no-experience">No Experience</option>
-                    <option value="one-five-years">1-5 Years</option>
-                    <option value="five-ten-years">5-10 Years</option>
-                    <option value="ten-plus-years">10+ Years</option>
-                </select>
-            </div>
-
-            <button type="submit">Submit Form</button>
-        </form>
-        
-        <div class="note" style="margin-top: 20px;">
-            <strong>📝 Note:</strong>
-            <p>This form uses AJAX submission. Open the browser's Network tab (F12) to see the API call when you submit the form.</p>
-            <p>The script below intercepts the form submission and uses fetch() instead of normal form navigation.</p>
-        </div>
-    </div>
-    
-    <!-- Add this script to enable AJAX form submission (shows in Network tab) -->
-    <script src="https://firebase-backend-dbjd3zar5-dhruvi056s-projects.vercel.app/embed-form.js"></script>
-</body>
-
-</html>
+  <button type="submit">Send</button>
+</form>

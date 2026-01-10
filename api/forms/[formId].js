@@ -48,144 +48,87 @@ function parseBody(req) {
 // Main Handler
 export default async function handler(req, res) {
 
-  // CORS - Allow forms to work from anywhere (like Getform.io)
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // Handle GET request (for viewing form endpoint)
-  if (req.method === "GET") {
-    // Extract formId from query (Vercel rewrite) or from URL path
-    const formId = req.query.formId || (req.url ? req.url.split('/').filter(Boolean).pop()?.split('?')[0] : null);
-    if (!formId) {
-      return res.status(400).send(`
-        <!doctype html>
-        <html><body><script>alert('Error: Missing Form ID');</script></body></html>
-      `);
-    }
-    return res.status(200).send(`
-      <!doctype html>
-      <html>
-        <head>
-          <title>Form Endpoint</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-              max-width: 600px;
-              margin: 50px auto;
-              padding: 20px;
-              background: #f5f5f5;
-            }
-            .container {
-              background: white;
-              padding: 30px;
-              border-radius: 8px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            h1 { color: #333; margin-bottom: 20px; }
-            p { color: #666; line-height: 1.6; }
-            .info {
-              background: #e3f2fd;
-              padding: 15px;
-              border-radius: 4px;
-              margin: 20px 0;
-              border-left: 4px solid #2196f3;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>Form Endpoint Ready</h1>
-            <div class="info">
-              <p><strong>Form ID:</strong> ${formId}</p>
-              <p>This endpoint is ready to receive form submissions.</p>
-              <p>Use <code>action="/forms/${formId}"</code> and <code>method="POST"</code> in your form.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-  }
-
   if (req.method !== "POST") {
-    return res.status(405).send(`
-      <!doctype html>
-      <html><body><script>alert('Error: Only POST requests allowed'); history.back();</script></body></html>
-    `);
+    return res.status(405).json({ error: "Only POST requests allowed" });
   }
 
-  // Extract formId from query (Vercel rewrite) or from URL path
-  const formId = req.query.formId || (req.url ? req.url.split('/').filter(Boolean).pop()?.split('?')[0] : null);
+  const formId = req.query.formId;
   if (!formId) {
-    return res.status(400).send(`
-      <!doctype html>
-      <html><body><script>alert('Error: Missing Form ID'); history.back();</script></body></html>
-    `);
+    return res.status(400).json({ error: "Missing formId" });
   }
 
   if (!db) {
-    return res.status(500).send(`
-      <!doctype html>
-      <html><body><script>alert('Error: Server configuration issue'); history.back();</script></body></html>
-    `);
+    return res.status(500).json({
+      error: "Firebase not initialized",
+    });
   }
 
   try {
+    // 1️ Parse Form Body
     const formData = parseBody(req);
 
     if (!formData || Object.keys(formData).length === 0) {
-      return res.status(400).send(`
-        <!doctype html>
-        <html><body><script>alert('Error: No form data received'); history.back();</script></body></html>
-      `);
+      return res.status(400).json({
+        error: "No form data received",
+      });
     }
 
+    // 2️ Clean empty fields
     const cleanData = {};
     for (let key in formData) {
-      if (formData[key] !== "" && formData[key] !== null && formData[key] !== undefined && key !== "_gotcha") {
+      if (formData[key] !== "" && formData[key] !== null) {
         cleanData[key] = formData[key];
       }
     }
-    
-    if (Object.keys(cleanData).length === 0) {
-      return res.status(400).send(`
-        <!doctype html>
-        <html><body><script>alert('Error: No valid form data to save'); history.back();</script></body></html>
-      `);
-    }
 
+    // 3️ Save to Firestore
     await db.collection(`forms/${formId}/submissions`).add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Always return alert message (like Getform.io)
-    return res.status(200).send(`
-      <!doctype html>
-      <html>
-        <body>
-          <script>
-            alert('Thank you! Your form was submitted successfully.');
-            if (document.referrer) {
-              window.location.replace(document.referrer);
-            } else {
-              history.back();
-            }
-          </script>
-        </body>
-      </html>
-    `);
+    // 4️ Response
+    const acceptsHtml = req.headers.accept?.includes("text/html");
+
+    if (acceptsHtml) {
+      // Show an alert and return to the previous page so the user never leaves
+      return res.status(200).send(`
+        <!doctype html>
+        <html>
+          <body>
+            <script>
+              alert('Thank you! Your form was submitted.');
+              if (document.referrer) {
+                window.location.replace(document.referrer);
+              } else {
+                history.back();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Form submitted successfully",
+      data: cleanData,
+    });
 
   } catch (error) {
-    return res.status(500).send(`
-      <!doctype html>
-      <html><body><script>alert('Error: ${error.message}'); history.back();</script></body></html>
-    `);
+    return res.status(500).json({
+      error: "Server error",
+      message: error.message,
+    });
   }
 }
 

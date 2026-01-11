@@ -49,18 +49,25 @@ function RoutePersist() {
 }
 
 function AppRoutes() {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Redirect to login on first visit or when not authenticated
+  // Show login page while checking auth state
   useEffect(() => {
-    if (!currentUser) {
-      if (location.pathname === "/" || location.pathname === "") {
+    if (!loading) {
+      // After auth check is complete, redirect to login if no user
+      if (!currentUser && (location.pathname === "/" || location.pathname === "")) {
         navigate("/login", { replace: true });
       }
     }
-  }, [currentUser, location.pathname, navigate]);
+  }, [loading, currentUser, location.pathname, navigate]);
+
+  // Show login page while checking auth state (prevents dashboard flash)
+  if (loading) {
+    // Always show login page while loading to prevent dashboard flash
+    return <Login />;
+  }
 
   return (
     <>
@@ -75,6 +82,18 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/"
+          element={
+            currentUser ? (
+              <PrivateRoute>
+                <Home />
+              </PrivateRoute>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
           path="/signup"
           element={
             <PublicRoute>
@@ -85,25 +104,9 @@ function AppRoutes() {
         <Route
           path="/forms/:formId"
           element={
-            currentUser ? (
-              <PrivateRoute>
-                <Home />
-              </PrivateRoute>
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-        <Route
-          path="/"
-          element={
-            currentUser ? (
-              <PrivateRoute>
-                <Home />
-              </PrivateRoute>
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            <PrivateRoute>
+              <Home />
+            </PrivateRoute>
           }
         />
         <Route
@@ -124,7 +127,7 @@ function AppRoutes() {
 function App() {
   return (
     <ToastProvider>
-      <Router basename="/">
+      <Router>
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>

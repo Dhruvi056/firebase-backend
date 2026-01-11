@@ -8,19 +8,35 @@ let db;
 if (!admin.apps.length) {
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
   if (privateKey) {
-    // Replace escaped newlines (\\n) with actual newlines (\n)
+    // Handle different escape formats (Vercel environment variables)
+    // Replace escaped newlines with actual newlines
     privateKey = privateKey.replace(/\\n/g, "\n");
+    // Also handle if it's already a string with literal \n
+    privateKey = privateKey.replace(/\\\\n/g, "\n");
+    // Remove quotes if present
+    privateKey = privateKey.replace(/^["']|["']$/g, "");
   }
 
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey,
-    }),
-  });
+  if (!privateKey || !process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL) {
+    console.error("Missing Firebase configuration");
+    throw new Error("Firebase configuration is incomplete");
+  }
 
-  db = admin.firestore();
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey,
+      }),
+    });
+
+    db = admin.firestore();
+    console.log("Firebase Admin initialized successfully");
+  } catch (error) {
+    console.error("Firebase initialization error:", error.message);
+    throw error;
+  }
 } else {
   db = admin.firestore();
 }

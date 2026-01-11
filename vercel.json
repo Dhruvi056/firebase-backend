@@ -4,11 +4,14 @@
   "outputDirectory": "build",
   "devCommand": "npm start",
   "framework": "create-react-app",
+
   "functions": {
     "api/forms/[formId].js": {
+      "runtime": "nodejs16.x",
       "maxDuration": 10
     }
   },
+
   "rewrites": [
     {
       "source": "/forms/:formId",
@@ -20,4 +23,3 @@
     }
   ]
 }
-

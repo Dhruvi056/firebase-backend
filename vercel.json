@@ -7,7 +7,7 @@
 
   "functions": {
     "api/forms/[formId].js": {
-      "runtime": "nodejs16.x",
+      "runtime": "nodejs18.x",
       "maxDuration": 10
     }
   },

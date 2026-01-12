@@ -7,13 +7,30 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
 function PrivateRoute({ children }) {
-  const { currentUser } = useAuth();
-  return currentUser ? children : <Navigate to="/login" />;
+  const { currentUser, loading } = useAuth();
+  // Wait for auth check to complete
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  // Only show children if user is authenticated
+  return currentUser ? children : <Navigate to="/login" replace />;
 }
 
 function PublicRoute({ children }) {
-  const { currentUser } = useAuth();
-  return !currentUser ? children : <Navigate to="/" />;
+  const { currentUser, loading } = useAuth();
+  // Only redirect if auth check is complete and user is logged in
+  if (!loading && currentUser) {
+    return <Navigate to="/" replace />;
+  }
+  // Show children (login/signup) if not logged in or still loading
+  return children;
 }
 
 function RoutePersist() {
@@ -53,7 +70,7 @@ function AppRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Show login page while checking auth state
+  // Redirect to login if not authenticated (only after loading is complete)
   useEffect(() => {
     if (!loading) {
       // After auth check is complete, redirect to login if no user
@@ -63,10 +80,16 @@ function AppRoutes() {
     }
   }, [loading, currentUser, location.pathname, navigate]);
 
-  // Show login page while checking auth state (prevents dashboard flash)
+  // Show loading state while checking auth (prevents auto-login flash)
   if (loading) {
-    // Always show login page while loading to prevent dashboard flash
-    return <Login />;
+    return (
+      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

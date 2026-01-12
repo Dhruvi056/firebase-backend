@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthWithToast } from "../hooks/useAuthWithToast";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function Login() {
@@ -8,17 +9,65 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuthWithToast();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  // Navigate to dashboard only when user is authenticated AFTER manual login
+  useEffect(() => {
+    // Only navigate if loginSuccess flag is set (meaning user just logged in)
+    // This prevents auto-navigation from cached sessions
+    if (loginSuccess && currentUser) {
+      setLoading(false);
+      navigate("/", { replace: true });
+      setLoginSuccess(false);
+    } else if (loginSuccess && !currentUser) {
+      // If login was marked successful but user is not authenticated, there was an issue
+      setTimeout(() => {
+        if (!currentUser) {
+          setError("Login failed. Please check your credentials.");
+          setLoading(false);
+          setLoginSuccess(false);
+        }
+      }, 500);
+    }
+    // Do NOT navigate if currentUser exists but loginSuccess is false
+    // This means it's a cached session, not a fresh login
+  }, [currentUser, loginSuccess, navigate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
 
+    // Clear previous errors
+    setError("");
+    setLoading(true);
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
+      setLoading(false);
+      return;
+    }
+
+    // Validate password is not empty
+    if (!password || password.trim().length === 0) {
+      setError("Password is required.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      setError("");
-      setLoading(true);
+      // Attempt login - this will throw error if credentials are wrong
       await login(email, password);
-      navigate("/");
+      
+      // Mark login as successful - useEffect will handle navigation when currentUser is set
+      setLoginSuccess(true);
+      // Loading will be set to false in useEffect when navigation happens
     } catch (err) {
+      // Login failed - do NOT navigate to dashboard
+      setLoginSuccess(false);
+      setLoading(false);
       let errorMessage = "Failed to log in";
       
       if (err.code === "auth/user-not-found") {
@@ -27,6 +76,8 @@ export default function Login() {
         errorMessage = "Incorrect password. Please try again.";
       } else if (err.code === "auth/invalid-email") {
         errorMessage = "Invalid email address. Please enter a valid email.";
+      } else if (err.code === "auth/invalid-credential") {
+        errorMessage = "Invalid email or password. Please check your credentials.";
       } else if (err.code === "auth/operation-not-allowed") {
         errorMessage = "Email/Password authentication is not enabled. Please enable it in Firebase Console.";
       } else if (err.code === "auth/configuration-not-found") {
@@ -36,9 +87,8 @@ export default function Login() {
       }
       
       setError(errorMessage);
+      // Stay on login page - do NOT navigate
     }
-
-    setLoading(false);
   }
 
   return (

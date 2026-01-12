@@ -1,9 +1,6 @@
 import admin from "firebase-admin";
 import querystring from "querystring";
 
-// ---------------------
-// Initialize Firebase
-// ---------------------
 let db;
 if (!admin.apps.length) {
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
@@ -91,7 +88,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1️⃣ Parse Form Body
+    //  Parse Form Body
     const formData = parseBody(req);
 
     if (!formData || Object.keys(formData).length === 0) {
@@ -100,21 +97,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2️⃣ Clean empty fields
+    //  Clean empty fields and filter out Cloudflare Turnstile response
     const cleanData = {};
     for (let key in formData) {
+      // Skip Cloudflare Turnstile response field
+      if (key === 'cf-turnstile-response') {
+        continue;
+      }
       if (formData[key] !== "" && formData[key] !== null) {
         cleanData[key] = formData[key];
       }
     }
 
-    // 3️⃣ Save to Firestore
+    //  Save to Firestore
     await db.collection(`forms/${formId}/submissions`).add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 4️⃣ Response
+    //  Response
     return res.status(200).json({
       success: true,
       message: "Form submitted successfully",

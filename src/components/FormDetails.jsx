@@ -37,10 +37,28 @@ export default function FormDetails({ form }) {
         const list = snap.docs.map((doc) => {
           const data = doc.data();
           console.log("Submission data:", { id: doc.id, data });
+          // Format date in Indian Standard Time (IST)
+          let formattedDate = "N/A";
+          if (data.submittedAt?.toDate) {
+            const date = data.submittedAt.toDate();
+            formattedDate = date.toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: true,
+            });
+          } else if (data.submittedAt) {
+            formattedDate = data.submittedAt;
+          }
+
           return {
             id: doc.id,
             ...data,
-            submittedAt: data.submittedAt?.toDate()?.toLocaleString() || data.submittedAt || "N/A",
+            submittedAt: formattedDate,
           };
         });
         setSubmissions(list);
@@ -70,8 +88,8 @@ export default function FormDetails({ form }) {
   const fields = Array.from(allFields).filter((f) => f !== "_gotcha");
 
   return (
-    <section className="flex-1 h-full bg-white rounded-xl border overflow-hidden">
-      <div className="p-6 border-b">
+    <section className="flex-1 h-full bg-white rounded-xl border overflow-hidden flex flex-col">
+      <div className="p-6 border-b flex-shrink-0">
         <h1 className="text-2xl font-semibold">{form.name}</h1>
         <div className="mt-2 flex items-center gap-2">
           <p className="text-blue-600 break-all">{form.url}</p>
@@ -113,22 +131,39 @@ export default function FormDetails({ form }) {
         </div>
       </div>
 
-      <div className="p-6">
-        <h2 className="text-xl font-semibold mb-4">
+      <div className="flex-1 flex flex-col overflow-hidden p-6">
+        <h2 className="text-xl font-semibold mb-4 flex-shrink-0">
           Submissions {submissions.length > 0 && <span className="text-sm font-normal text-gray-500">({submissions.length})</span>}
         </h2>
 
         {submissions.length === 0 ? (
-          <div>
+          <div className="flex-shrink-0">
             <p className="text-gray-600">No submissions yet...</p>
             <p className="text-sm text-gray-500 mt-2">
               Submit a form using the endpoint above to see data here.
             </p>
           </div>
         ) : (
-          <div className="overflow-auto border rounded-lg">
+          <div className="flex-1 overflow-auto border rounded-lg" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+            <style>{`
+              div::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+              }
+              div::-webkit-scrollbar-track {
+                background: #f1f5f9;
+                border-radius: 4px;
+              }
+              div::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 4px;
+              }
+              div::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+              }
+            `}</style>
             <table className="w-full">
-              <thead className="bg-gray-100">
+              <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr>
                   {fields.map((f) => (
                     <th key={f} className="px-4 py-2 text-left text-sm font-semibold text-gray-700">{f}</th>

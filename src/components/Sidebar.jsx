@@ -98,11 +98,27 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
 
   return (
     <aside className="w-[250px] h-full bg-gray-100 rounded-3xl border border-gray-200 shadow-sm flex flex-col">
-      <div className="px-6 pt-6 pb-4">
+      <div className="px-6 pt-6 pb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">Forms</h1>
       </div>
 
-      <div className="px-6">
+      <div className="flex-1 overflow-y-auto px-6" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+        <style>{`
+          aside::-webkit-scrollbar {
+            width: 8px;
+          }
+          aside::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+          }
+          aside::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+          }
+          aside::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
         <button
           onClick={() => setShowPopup(true)}
           className="w-full text-left text-sm font-semibold text-gray-800 bg-gray-200 hover:bg-gray-300 transition-colors px-4 py-3 rounded-2xl flex items-center gap-2"
@@ -123,7 +139,6 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
           Home
         </button>
 
-        {/* Forms without folder */}
         {formsWithoutFolder.length > 0 && (
           <div className="mt-4">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">

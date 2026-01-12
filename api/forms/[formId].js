@@ -98,7 +98,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1️ Parse Form Body
+   
     const formData = parseBody(req);
 
     if (!formData || Object.keys(formData).length === 0) {
@@ -107,25 +107,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2️ Clean empty fields
     const cleanData = {};
     for (let key in formData) {
+     
+      if (key === 'cf-turnstile-response') {
+        continue;
+      }
       if (formData[key] !== "" && formData[key] !== null) {
         cleanData[key] = formData[key];
       }
     }
 
-    // 3️ Save to Firestore
     await db.collection(`forms/${formId}/submissions`).add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 4️ Response
     const acceptsHtml = req.headers.accept?.includes("text/html");
 
     if (acceptsHtml) {
-      // Show an alert and return to the previous page so the user never leaves
       return res.status(200).send(`
         <!doctype html>
         <html>

@@ -49,11 +49,8 @@
     // Check both data attribute and action attribute
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
     if (!endpoint || !endpoint.includes("/api/f/")) {
-      // Not our form, let it submit normally
       return;
     }
-
-    // Prevent default form submission (navigation)
     e.preventDefault();
     e.stopPropagation();
 
@@ -67,8 +64,7 @@
     try {
       const body = new URLSearchParams(new FormData(form)).toString();
       
-      // Log to console for debugging (visible in network tab)
-      console.log("🚀 Submitting form to:", endpoint);
+      console.log(" Submitting form to:", endpoint);
       
       const res = await fetch(endpoint, {
         method: "POST",
@@ -77,20 +73,18 @@
           "Accept": "application/json",
         },
         body,
-        // Ensure request is visible in network tab
         credentials: "omit",
         cache: "no-cache",
       });
 
-      // Log response for debugging
-      console.log("✅ Form submission response:", res.status, res.statusText);
+      console.log("Form submission response:", res.status, res.statusText);
 
       const json = await res.json();
       const ok = res.ok;
       showToast(ok ? json.message || json.success || "Submitted!" : json.error || json.message || "Failed", ok);
       if (ok) form.reset();
     } catch (err) {
-      console.error("❌ Form submission error:", err);
+      console.error(" Form submission error:", err);
       showToast("Network error: " + err.message, false);
     } finally {
       if (submitBtn) {
@@ -109,7 +103,7 @@
     if (endpoint && endpoint.includes("/api/f/")) {
       form.addEventListener("submit", handleSubmit, { capture: true });
       FORMS_ATTACHED.add(form);
-      console.log("✅ Form handler attached to:", endpoint);
+      console.log("Form handler attached to:", endpoint);
     }
   }
 

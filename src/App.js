@@ -2,6 +2,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
+import FormToastListener from "./components/FormToastListener";
+import ResetPassword from "./pages/ResetPassword";
+
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -132,6 +135,7 @@ function AppRoutes() {
             </PrivateRoute>
           }
         />
+          <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="*"
           element={
@@ -143,6 +147,8 @@ function AppRoutes() {
           }
         />
       </Routes>
+    
+
     </>
   );
 }
@@ -154,6 +160,7 @@ function App() {
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>
+         <FormToastListener />
       </Router>
     </ToastProvider>
   );

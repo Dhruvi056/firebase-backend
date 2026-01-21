@@ -1,21 +1,158 @@
-<form action="https://firebase-backend-nst5b8poj-dhruvi056s-projects.vercel.app/api/forms/buodpxn4" method="POST" >
-  <input type="text" name="name">
-  <input type="email" name="email">
-  <input type="text" name="message">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Contact Form</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
 
-  <input type="hidden" name="_gotcha" style="display:none !important">
+    .form-container {
+      background: #ffffff;
+      padding: 25px 30px;
+      width: 100%;
+      max-width: 420px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
 
-  <input type="checkbox" name="subscribe" value="yes" checked>
-  <input type="hidden" name="subscribe" value="no">
+    .form-container h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
 
-  <input type="radio" name="gender" value="male" checked>
-  <input type="radio" name="gender" value="female">
-  <input type="radio" name="gender" value="other">
+    .form-group {
+      margin-bottom: 15px;
+    }
 
-  <select name="work-experience">
-    <option value="one-year">0-1 years</option>
-    <option value="one-five-years">1-5 years</option>
-  </select>
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #444;
+    }
 
-  <button type="submit">Send</button>
-</form>
+    input[type="text"],
+    input[type="email"],
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: #4f46e5;
+    }
+
+    .radio-group,
+    .checkbox-group {
+      display: flex;
+      gap: 15px;
+      margin-top: 5px;
+    }
+
+    .radio-group label,
+    .checkbox-group label {
+      font-weight: normal;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background: #4338ca;
+    }
+  </style>
+</head>
+<body>
+
+  <form 
+    class="form-container"
+    action="http://localhost:3001/api/forms/mj03at7c"
+    method="POST"
+  >
+    <h2>Contact Us</h2>
+
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" name="name" required />
+    </div>
+
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" name="email" required />
+    </div>
+
+    <div class="form-group">
+      <label>Message</label>
+      <input type="text" name="message" />
+    </div>
+
+    <!-- Honeypot -->
+    <input type="hidden" name="_gotcha" style="display:none !important">
+
+    <div class="form-group">
+      <label>Subscribe</label>
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="subscribe" value="yes" checked />
+          Yes
+        </label>
+      </div>
+      <input type="hidden" name="subscribe" value="no">
+    </div>
+
+    <div class="form-group">
+      <label>Gender</label>
+      <div class="radio-group">
+        <label>
+          <input type="radio" name="gender" value="male" checked />
+          Male
+        </label>
+        <label>
+          <input type="radio" name="gender" value="female" />
+          Female
+        </label>
+        <label>
+          <input type="radio" name="gender" value="other" />
+          Other
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Work Experience</label>
+      <select name="work-experience">
+        <option value="one-year">0–1 years</option>
+        <option value="one-five-years">1–5 years</option>
+      </select>
+    </div>
+
+    <button type="submit">Send Message</button>
+  </form>
+
+</body>
+</html>

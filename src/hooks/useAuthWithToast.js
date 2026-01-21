@@ -3,7 +3,7 @@ import { useToast } from '../context/ToastContext';
 
 // Custom hook that combines auth and toast functionality
 export const useAuthWithToast = () => {
-  const { signup, login, logout, currentUser } = useAuth();
+  const { signup, login, logout, resetPassword, currentUser } = useAuth();
   const { addToast } = useToast();
 
   const signupWithToast = async (email, password) => {
@@ -65,10 +65,34 @@ export const useAuthWithToast = () => {
     }
   };
 
+  const resetPasswordWithToast = async (email) => {
+    try {
+      await resetPassword(email);
+      addToast('Password reset email sent successfully! Please check your inbox.', 'success');
+      return Promise.resolve();
+    } catch (error) {
+      let errorMessage = 'Failed to send password reset email';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      addToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
   return {
     signup: signupWithToast,
     login: loginWithToast,
     logout: logoutWithToast,
+    resetPassword: resetPasswordWithToast,
     currentUser
   };
 };

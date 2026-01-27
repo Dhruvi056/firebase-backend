@@ -63,28 +63,38 @@ function parseBody(req) {
 function createTransporter() {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.warn("Email credentials not configured. Emails will not be sent.");
+    console.warn("EMAIL_USER:", process.env.EMAIL_USER ? "SET" : "NOT SET");
+    console.warn("EMAIL_PASS:", process.env.EMAIL_PASS ? "SET" : "NOT SET");
     return null;
   }
 
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS, // Gmail App Password
-    },
-  });
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS, // Gmail App Password
+      },
+    });
+    console.log("Email transporter created successfully");
+    return transporter;
+  } catch (error) {
+    console.error("Error creating email transporter:", error);
+    return null;
+  }
 }
 
 // Send notification email
 async function sendNotificationEmail(toEmail, formData, formName, formUrl, cleanData) {
+  console.log(`Attempting to send email to: ${toEmail}`);
   const transporter = createTransporter();
   if (!transporter) {
     console.warn("Email transporter not available. Skipping email notification.");
-    return;
+    return { success: false, error: "Transporter not available" };
   }
 
   try {
-    await transporter.sendMail({
+    const mailOptions = {
       from: `"Form App" <${process.env.EMAIL_USER}>`,
       to: toEmail,
       subject: `New Form Submission - ${formName}`,
@@ -102,11 +112,26 @@ async function sendNotificationEmail(toEmail, formData, formName, formUrl, clean
           )
           .join("")}
       `,
+    };
+
+    console.log("Sending email with options:", {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject,
     });
-    console.log(`📧 Notification email sent to ${toEmail}`);
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`📧 Notification email sent successfully to ${toEmail}`, info.messageId);
+    return { success: true, messageId: info.messageId };
   } catch (emailError) {
     console.error("Error sending notification email:", emailError);
-    // Don't throw - we don't want email failures to break form submissions
+    console.error("Error details:", {
+      message: emailError.message,
+      code: emailError.code,
+      command: emailError.command,
+      response: emailError.response,
+    });
+    return { success: false, error: emailError.message };
   }
 }
 
@@ -168,6 +193,7 @@ export default async function handler(req, res) {
     });
 
     // Send email notification if configured
+    let emailResult = null;
     try {
       const formDoc = await db.collection("forms").doc(formId).get();
       
@@ -176,17 +202,28 @@ export default async function handler(req, res) {
         const notifyEmail = formData.notifyEmail || formData.notificationEmail;
 
         if (notifyEmail) {
-          // Send email asynchronously (don't wait for it to complete)
-          sendNotificationEmail(
-            notifyEmail,
-            formData,
-            formData.name || formId,
-            formData.url || "N/A",
-            cleanData
-          ).catch((err) => {
+          console.log(`Form has notification email configured: ${notifyEmail}`);
+          // Wait for email to be sent (with timeout protection)
+          emailResult = await Promise.race([
+            sendNotificationEmail(
+              notifyEmail,
+              formData,
+              formData.name || formId,
+              formData.url || "N/A",
+              cleanData
+            ),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Email timeout")), 8000)
+            ),
+          ]).catch((err) => {
             console.error("Failed to send notification email:", err);
+            return { success: false, error: err.message };
           });
+        } else {
+          console.log("No notification email configured for this form");
         }
+      } else {
+        console.log(`Form document ${formId} not found`);
       }
     } catch (emailError) {
       // Log but don't fail the request if email check fails

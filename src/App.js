@@ -2,38 +2,18 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
-import FormToastListener from "./components/FormToastListener";
-import ResetPassword from "./pages/ResetPassword";
-
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
 function PrivateRoute({ children }) {
-  const { currentUser, loading } = useAuth();
-  // Wait for auth check to complete
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-  // Only show children if user is authenticated
-  return currentUser ? children : <Navigate to="/login" replace />;
+  const { currentUser } = useAuth();
+  return currentUser ? children : <Navigate to="/login" />;
 }
 
 function PublicRoute({ children }) {
-  const { currentUser, loading } = useAuth();
-  // Only redirect if auth check is complete and user is logged in
-  if (!loading && currentUser) {
-    return <Navigate to="/" replace />;
-  }
-  // Show children (login/signup) if not logged in or still loading
-  return children;
+  const { currentUser } = useAuth();
+  return !currentUser ? children : <Navigate to="/" />;
 }
 
 function RoutePersist() {
@@ -57,9 +37,14 @@ function RoutePersist() {
       // Only restore if we're on home page (/) and there's a saved route that's different
       if (lastRoute && lastRoute !== "/" && lastRoute !== "/login" && lastRoute !== "/signup") {
         // Only navigate if we're on the home page, not if we're already on a specific route
-        if (location.pathname === "/") {
-          navigate(lastRoute, { replace: true });
-        }
+        // Add small delay to prevent navigation conflicts
+        const timer = setTimeout(() => {
+          if (location.pathname === "/") {
+            navigate(lastRoute, { replace: true });
+          }
+        }, 150);
+        
+        return () => clearTimeout(timer);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,31 +54,23 @@ function RoutePersist() {
 }
 
 function AppRoutes() {
-  const { currentUser, loading } = useAuth();
+  const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Redirect to login if not authenticated (only after loading is complete)
+  // Redirect to login on first visit or when not authenticated
   useEffect(() => {
-    if (!loading) {
-      // After auth check is complete, redirect to login if no user
-      if (!currentUser && (location.pathname === "/" || location.pathname === "")) {
-        navigate("/login", { replace: true });
-      }
+    if (!currentUser && (location.pathname === "/" || location.pathname === "")) {
+      // Use setTimeout to prevent immediate navigation conflicts
+      const timer = setTimeout(() => {
+        if (location.pathname === "/" || location.pathname === "") {
+          navigate("/login", { replace: true });
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [loading, currentUser, location.pathname, navigate]);
-
-  // Show loading state while checking auth (prevents auto-login flash)
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [currentUser, location.pathname, navigate]);
 
   return (
     <>
@@ -105,6 +82,26 @@ function AppRoutes() {
             <PublicRoute>
               <Login />
             </PublicRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <PublicRoute>
+              <Signup />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/forms/:formId"
+          element={
+            currentUser ? (
+              <PrivateRoute>
+                <Home />
+              </PrivateRoute>
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
         <Route
@@ -120,23 +117,6 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/signup"
-          element={
-            <PublicRoute>
-              <Signup />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/forms/:formId"
-          element={
-            <PrivateRoute>
-              <Home />
-            </PrivateRoute>
-          }
-        />
-          <Route path="/reset-password" element={<ResetPassword />} />
-        <Route
           path="*"
           element={
             currentUser ? (
@@ -147,8 +127,6 @@ function AppRoutes() {
           }
         />
       </Routes>
-    
-
     </>
   );
 }
@@ -156,11 +134,10 @@ function AppRoutes() {
 function App() {
   return (
     <ToastProvider>
-      <Router>
+      <Router basename="/">
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>
-         <FormToastListener />
       </Router>
     </ToastProvider>
   );

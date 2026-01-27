@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuthWithToast } from "../hooks/useAuthWithToast";
 import { useNavigate, Link } from "react-router-dom";
+import toast from "react-hot-toast";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -26,6 +27,7 @@ export default function Signup() {
       setError("");
       setLoading(true);
       await signup(email, password);
+      toast.success("Account created successfully! Welcome!");
       navigate("/");
     } catch (err) {
       console.error("Signup error details:", {

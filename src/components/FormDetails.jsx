@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { db } from "../firebase";
-import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, onSnapshot, orderBy, doc, getDoc, updateDoc } from "firebase/firestore";
 
 export default function FormDetails({ form }) {
   const [submissions, setSubmissions] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [customEmail, setCustomEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
 
   const copyToClipboard = async (text) => {
     try {
@@ -16,12 +20,60 @@ export default function FormDetails({ form }) {
     }
   };
 
+  
+const loadCustomEmail = useCallback(async () => {
+  try {
+    if (!form?.formId) return;
+
+    const formDocRef = doc(db, "forms", form.formId);
+    const formDoc = await getDoc(formDocRef);
+
+    if (formDoc.exists()) {
+      const formData = formDoc.data();
+      setCustomEmail(formData.notificationEmail || "");
+    }
+  } catch (error) {
+    console.error("Error loading custom email:", error);
+  }
+}, [form?.formId]);
+
+useEffect(() => {
+  loadCustomEmail();
+}, [loadCustomEmail]);
+
+
+  const saveCustomEmail = async () => {
+    if (!form?.formId) return;
+
+    setEmailLoading(true);
+
+    try {
+      const formDocRef = doc(db, 'forms', form.formId);
+      await updateDoc(formDocRef, {
+        notificationEmail: customEmail
+      });
+
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 2000);
+      setShowEmailModal(false);
+    } catch (error) {
+      console.error('Error saving custom email:', error);
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const openEmailModal = () => {
+    loadCustomEmail(); // Reload current email when opening modal
+    setShowEmailModal(true);
+  };
+
   useEffect(() => {
     if (!form) return;
 
     console.log("FormDetails: Loading submissions for formId:", form.formId);
     const ref = collection(db, `forms/${form.formId}/submissions`);
-    
+
     let q;
     try {
       q = query(ref, orderBy("submittedAt", "desc"));
@@ -128,7 +180,102 @@ export default function FormDetails({ form }) {
               </svg>
             )}
           </button>
+
+          {/* Notification Email Icon */}
+          <button
+            onClick={openEmailModal}
+            className="ml-40 p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 border border-transparent hover:border-gray-300 group"
+            title="Set notification email"
+            aria-label="Set notification email"
+          >
+
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+          </button>
+
         </div>
+
+        {/* Notification Email Modal */}
+        {showEmailModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Notification Email</h3>
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  placeholder="Enter email for notifications"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  You will receive an email notification whenever someone submits this form.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveCustomEmail}
+                  disabled={emailLoading}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {emailLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+
+              {emailSaved && (
+                <div className="mt-3 text-sm text-green-600 flex items-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 mr-1"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Email saved successfully!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden p-6">

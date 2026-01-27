@@ -7,11 +7,9 @@ export default function FormToastListener() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    // ✅ SUCCESS CASE
     if (params.get("form") === "success") {
       addToast("Form submitted successfully!", "success");
 
-      // ✅ URL clean (important)
       params.delete("form");
       const newUrl =
         window.location.pathname +
@@ -20,7 +18,6 @@ export default function FormToastListener() {
       window.history.replaceState({}, "", newUrl);
     }
 
-    // ❌ ERROR CASE (future use)
     if (params.get("form") === "error") {
       addToast("Form submission failed", "error");
 

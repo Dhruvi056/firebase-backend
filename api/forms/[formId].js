@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import querystring from "querystring";
+import nodemailer from "nodemailer";
 
 
 // Initialize Firebase
@@ -60,6 +61,56 @@ function parseBody(req) {
   return {};
 }
 
+// Setup Nodemailer transporter
+function createTransporter() {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn("Email credentials not configured. Emails will not be sent.");
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS, // Gmail App Password
+    },
+  });
+}
+
+// Send notification email
+async function sendNotificationEmail(toEmail, formData, formName, formUrl, cleanData) {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.warn("Email transporter not available. Skipping email notification.");
+    return;
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"Form App" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `New Form Submission - ${formName}`,
+      html: `
+        <h2>New Form Submission</h2>
+        <p><b>Form:</b> ${formName}</p>
+        <p><b>Form URL:</b> ${formUrl || "N/A"}</p>
+        <hr/>
+        ${Object.entries(cleanData)
+          .map(
+            ([key, value]) =>
+              `<p><b>${key}:</b> ${
+                Array.isArray(value) ? value.join(", ") : value
+              }</p>`
+          )
+          .join("")}
+      `,
+    });
+    console.log(`📧 Notification email sent to ${toEmail}`);
+  } catch (emailError) {
+    console.error("Error sending notification email:", emailError);
+    // Don't throw - we don't want email failures to break form submissions
+  }
+}
 
 // Main Handler
 export default async function handler(req, res) {
@@ -122,6 +173,32 @@ export default async function handler(req, res) {
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    // Send email notification if configured
+    try {
+      const formDoc = await db.collection("forms").doc(formId).get();
+      
+      if (formDoc.exists) {
+        const formData = formDoc.data();
+        const notifyEmail = formData.notifyEmail || formData.notificationEmail;
+
+        if (notifyEmail) {
+          // Send email asynchronously (don't wait for it to complete)
+          sendNotificationEmail(
+            notifyEmail,
+            formData,
+            formData.name || formId,
+            formData.url || "N/A",
+            cleanData
+          ).catch((err) => {
+            console.error("Failed to send notification email:", err);
+          });
+        }
+      }
+    } catch (emailError) {
+      // Log but don't fail the request if email check fails
+      console.error("Error checking for notification email:", emailError);
+    }
 
     const acceptsHtml = req.headers.accept?.includes("text/html");
 

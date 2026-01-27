@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuthWithToast } from "../hooks/useAuthWithToast";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
+import toast from "react-hot-toast";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -26,6 +27,7 @@ export default function Login() {
   useEffect(() => {
     if (loginSuccess && currentUser) {
       setLoading(false);
+      toast.success("Welcome back! Logged in successfully.");
       navigate("/", { replace: true });
       setLoginSuccess(false);
     } else if (loginSuccess && !currentUser) {

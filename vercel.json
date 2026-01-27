@@ -1,10 +1,9 @@
 {
   "version": 2,
-  "framework": "create-react-app",
-
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "devCommand": "npm start",
+  "framework": "create-react-app",
 
   "functions": {
     "api/forms/[formId].js": {
@@ -16,6 +15,10 @@
   },
 
   "rewrites": [
+    {
+      "source": "/forms/:formId",
+      "destination": "/api/forms/:formId"
+    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"

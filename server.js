@@ -53,7 +53,7 @@ const transporter = nodemailer.createTransport({
 
 /* -------------------- FORM SUBMIT API -------------------- */
 
-app.post("/api/forms/:formId", async (req, res) => {
+async function handleFormSubmit(req, res) {
   const { formId } = req.params;
 
   if (!formId) {
@@ -150,15 +150,55 @@ app.post("/api/forms/:formId", async (req, res) => {
       }
     }
 
-    return res.json({
+    // 3️⃣ Build a friendly success message (used by embed-form.js toast)
+    const { name, fname, lname } = cleanData;
+    const fullName = name || [fname, lname].filter(Boolean).join(" ");
+    const successPayload = {
       success: true,
-      message: "Form submitted successfully",
-    });
+      message: fullName
+        ? `Form submitted successfully. Thank you, ${fullName}!`
+        : "Form submitted successfully",
+    };
+    const acceptsHeader = req.headers.accept || "";
+    const wantsJson = acceptsHeader.includes("application/json");
+
+    if (wantsJson) {
+      return res.json(successPayload);
+    }
+
+    const referer = req.get("referer");
+    if (referer) {
+      return res.redirect(302, referer);
+    }
+
+    // Fallback: simple HTML thank‑you page
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Form submitted</title>
+        </head>
+        <body>
+          <h2>✅ Form submitted successfully</h2>
+          ${
+            fullName
+              ? `<p>Thank you, ${fullName}.</p>`
+              : "<p>Thank you for your submission.</p>"
+          }
+        </body>
+      </html>
+    `);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
   }
-});
+}
+
+// Primary routes
+app.post("/api/forms/:formId", handleFormSubmit);
+app.post("/api/f/:formId", handleFormSubmit);
 
 /* -------------------- Serve React (Production) -------------------- */
 

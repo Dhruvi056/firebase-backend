@@ -49,7 +49,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         name: formName.trim(),
         formId: id,
         url: formUrl,
-        folderId: selectedFolder, // यहाँ folderId document ID के रूप में save हो रहा है
+        folderId: selectedFolder, 
        // timezone: timezone || null,
         userId: currentUser.uid,
         createdAt: serverTimestamp(),
@@ -66,7 +66,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
             name: formName.trim(),
             formId: id,
             url: formUrl,
-            folderId: selectedFolder, // यह भी पास करें
+            folderId: selectedFolder, 
           });
         }
       } catch (error) {
@@ -74,7 +74,6 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         alert("Error creating form: " + error.message);
       }
     } else {
-      // Folder creation
       if (!folderName.trim()) {
         alert("Please enter a folder name");
         return;

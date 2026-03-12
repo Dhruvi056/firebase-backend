@@ -237,31 +237,49 @@ export default async function handler(req, res) {
       console.error("Error checking for notification email:", emailError);
     }
 
-    const acceptsHtml = req.headers.accept?.includes("text/html");
+    const { name, fname, lname } = cleanData;
+    const fullName = name || [fname, lname].filter(Boolean).join(" ");
+    const successPayload = {
+      success: true,
+      message: fullName
+        ? `Form submitted successfully. Thank you, ${fullName}!`
+        : "Form submitted successfully",
+      data: cleanData,
+    };
 
-    if (acceptsHtml) {
-      return res.status(200).send(`
-        <!doctype html>
-        <html>
-          <body>
-            <script>
-              alert('Thank you! Your form was submitted.');
-              if (document.referrer) {
-                window.location.replace(document.referrer);
-              } else {
-                history.back();
-              }
-            </script>
-          </body>
-        </html>
-      `);
+    const acceptsHeader = req.headers.accept || "";
+    const wantsJson = acceptsHeader.includes("application/json");
+
+    // If the client explicitly wants JSON (AJAX / embed-form.js), return JSON
+    if (wantsJson) {
+      return res.status(200).json(successPayload);
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Form submitted successfully",
-      data: cleanData,
-    });
+    // For plain HTML form posts, redirect back to the referrer if available
+    const referer = req.headers.referer || req.headers.referrer;
+    if (referer) {
+      return res.redirect(302, referer);
+    }
+
+    // Fallback: simple HTML thank-you page without any alert()
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(`
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Form submitted</title>
+        </head>
+        <body>
+          <h2>✅ Form submitted successfully</h2>
+          ${
+            fullName
+              ? `<p>Thank you, ${fullName}.</p>`
+              : "<p>Thank you for your submission.</p>"
+          }
+        </body>
+      </html>
+    `);
 
   } catch (error) {
     return res.status(500).json({

@@ -15,10 +15,7 @@
   },
 
   "rewrites": [
-    {
-      "source": "/forms/:formId",
-      "destination": "/api/forms/:formId"
-    },
+   
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"

@@ -48,7 +48,7 @@
     const form = e.target;
     // Check both data attribute and action attribute
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-    if (!endpoint || !endpoint.includes("/api/f/")) {
+    if (!endpoint || (!endpoint.includes("/api/f/") && !endpoint.includes("/api/forms/"))) {
       return;
     }
     e.preventDefault();
@@ -100,7 +100,8 @@
 
     const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
     // Only attach if endpoint looks like our API endpoint
-    if (endpoint && endpoint.includes("/api/f/")) {
+    if (endpoint &&
+  (endpoint.includes("/api/f/") || endpoint.includes("/api/forms/"))) {
       form.addEventListener("submit", handleSubmit, { capture: true });
       FORMS_ATTACHED.add(form);
       console.log("Form handler attached to:", endpoint);

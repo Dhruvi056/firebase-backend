@@ -255,31 +255,7 @@ export default async function handler(req, res) {
       return res.status(200).json(successPayload);
     }
 
-    // For plain HTML form posts, redirect back to the referrer if available
-    const referer = req.headers.referer || req.headers.referrer;
-    if (referer) {
-      return res.redirect(302, referer);
-    }
-
-    // Fallback: simple HTML thank-you page without any alert()
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.status(200).send(`
-      <!doctype html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Form submitted</title>
-        </head>
-        <body>
-          <h2>✅ Form submitted successfully</h2>
-          ${
-            fullName
-              ? `<p>Thank you, ${fullName}.</p>`
-              : "<p>Thank you for your submission.</p>"
-          }
-        </body>
-      </html>
-    `);
+   return res.status(204).end();
 
   } catch (error) {
     return res.status(500).json({

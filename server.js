@@ -165,31 +165,7 @@ async function handleFormSubmit(req, res) {
     if (wantsJson) {
       return res.json(successPayload);
     }
-
-    const referer = req.get("referer");
-    if (referer) {
-      return res.redirect(302, referer);
-    }
-
-    // Fallback: simple HTML thank‑you page
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.status(200).send(`
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Form submitted</title>
-        </head>
-        <body>
-          <h2>✅ Form submitted successfully</h2>
-          ${
-            fullName
-              ? `<p>Thank you, ${fullName}.</p>`
-              : "<p>Thank you for your submission.</p>"
-          }
-        </body>
-      </html>
-    `);
+  return res.status(204).end();
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });

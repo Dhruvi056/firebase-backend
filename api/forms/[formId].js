@@ -151,11 +151,13 @@ export default async function handler(req, res) {
 
   // Handle GET requests gracefully (for browser navigation/refresh)
   if (req.method === "GET") {
-    return res.status(200).json({
-      message: "This is a form submission endpoint. Use POST method to submit form data.",
-      endpoint: `/api/forms/${req.query.formId || "formId"}`,
-      method: "POST"
-    });
+    // return res.status(200).json({
+    //   message: "This is a form submission endpoint. Use POST method to submit form data.",
+    //   endpoint: `/api/forms/${req.query.formId || "formId"}`,
+    //   method: "POST"
+    // });
+    return res.status(404).send("Not found");
+
   }
 
   if (req.method !== "POST") {
@@ -255,7 +257,10 @@ export default async function handler(req, res) {
       return res.status(200).json(successPayload);
     }
 
-   return res.status(204).end();
+    // For plain HTML form posts (no JS), don't show JSON page.
+    // Just return empty 204 so browser stays on the same URL
+    // and external sites embedding this endpoint don't see output.
+    return res.status(204).end();
 
   } catch (error) {
     return res.status(500).json({

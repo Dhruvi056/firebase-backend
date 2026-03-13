@@ -47,18 +47,16 @@
   async function handleSubmit(e) {
     const form = e.target;
     // Check both data attribute and action attribute
-    const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-    if (!endpoint || (!endpoint.includes("/api/f/") && !endpoint.includes("/api/forms/"))) {
-      return;
+    const endpoint = form.getAttribute("data-firebase-form-endpoint");
+    if (!endpoint) {
+      return; 
     }
-    e.preventDefault();
-    e.stopPropagation();
+    // e.preventDefault();
+    // e.stopPropagation();
 
     const submitBtn = form.querySelector("[type=submit]");
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.dataset.originalText = submitBtn.textContent;
-      submitBtn.textContent = "Submitting...";
+    if (submitBtn && !submitBtn.dataset.originalText) {
+        submitBtn.dataset.originalText = submitBtn.textContent;
     }
 
     try {
@@ -77,31 +75,27 @@
         cache: "no-cache",
       });
 
-      console.log("Form submission response:", res.status, res.statusText);
-
-      const json = await res.json();
-      const ok = res.ok;
-      showToast(ok ? json.message || json.success || "Submitted!" : json.error || json.message || "Failed", ok);
-      if (ok) form.reset();
+      let msg = "Submitted!";
+      let ok = res.ok;
+      try {
+        const json = await res.json();
+        msg = json.message || json.success || msg;
+      } catch (_) {
+      }
+      showToast(ok ? msg : "Failed to submit to backend", ok);
     } catch (err) {
       console.error(" Form submission error:", err);
       showToast("Network error: " + err.message, false);
-    } finally {
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = submitBtn.dataset.originalText || "Submit";
-      }
-    }
+    } 
   }
 
   function attachToForm(form) {
     // Skip if already attached
     if (FORMS_ATTACHED.has(form)) return;
 
-    const endpoint = form.getAttribute("data-firebase-form-endpoint") || form.getAttribute("action");
-    // Only attach if endpoint looks like our API endpoint
-    if (endpoint &&
-  (endpoint.includes("/api/f/") || endpoint.includes("/api/forms/"))) {
+    const endpoint = form.getAttribute("data-firebase-form-endpoint");
+        // Only attach if endpoint looks like our API endpoint
+    if (endpoint) {
       form.addEventListener("submit", handleSubmit, { capture: true });
       FORMS_ATTACHED.add(form);
       console.log("Form handler attached to:", endpoint);

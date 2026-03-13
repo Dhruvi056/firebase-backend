@@ -150,15 +150,15 @@ export default async function handler(req, res) {
   }
 
   // Handle GET requests gracefully (for browser navigation/refresh)
-  if (req.method === "GET") {
-    // return res.status(200).json({
-    //   message: "This is a form submission endpoint. Use POST method to submit form data.",
-    //   endpoint: `/api/forms/${req.query.formId || "formId"}`,
-    //   method: "POST"
-    // });
-    return res.status(404).send("Not found");
+  // if (req.method === "GET") {
+  //   // return res.status(200).json({
+  //   //   message: "This is a form submission endpoint. Use POST method to submit form data.",
+  //   //   endpoint: `/api/forms/${req.query.formId || "formId"}`,
+  //   //   method: "POST"
+  //   // });
+  //   return res.status(404).send("Not found");
 
-  }
+  // }
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST requests allowed" });

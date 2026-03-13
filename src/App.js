@@ -7,13 +7,18 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 
 function PrivateRoute({ children }) {
-  const { currentUser } = useAuth();
-  return currentUser ? children : <Navigate to="/login" />;
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
+  return currentUser ? children : <Navigate to="/login" replace />;
 }
 
 function PublicRoute({ children }) {
-  const { currentUser } = useAuth();
-  return !currentUser ? children : <Navigate to="/" />;
+  const { currentUser, loading } = useAuth();
+  if (loading) return null;
+  if (!currentUser) return children;
+  const lastRoute = typeof window !== "undefined" ? localStorage.getItem("lastRoute") : null;
+  const target = lastRoute && lastRoute !== "/login" && lastRoute !== "/signup" ? lastRoute : "/";
+  return <Navigate to={target} replace />;
 }
 
 function RoutePersist() {
@@ -54,23 +59,37 @@ function RoutePersist() {
 }
 
 function AppRoutes() {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Redirect to login on first visit or when not authenticated
   useEffect(() => {
+    if (loading) return;
     if (!currentUser && (location.pathname === "/" || location.pathname === "")) {
-      // Use setTimeout to prevent immediate navigation conflicts
       const timer = setTimeout(() => {
         if (location.pathname === "/" || location.pathname === "") {
           navigate("/login", { replace: true });
         }
       }, 100);
-      
       return () => clearTimeout(timer);
     }
-  }, [currentUser, location.pathname, navigate]);
+  }, [currentUser, loading, location.pathname, navigate]);
+
+  if (loading) {
+    return (
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100vh",
+        background: "#f4f5f7",
+        color: "#666",
+        fontSize: "16px",
+      }}>
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <>
@@ -95,25 +114,17 @@ function AppRoutes() {
         <Route
           path="/forms/:formId"
           element={
-            currentUser ? (
-              <PrivateRoute>
-                <Home />
-              </PrivateRoute>
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            <PrivateRoute>
+              <Home />
+            </PrivateRoute>
           }
         />
         <Route
           path="/"
           element={
-            currentUser ? (
-              <PrivateRoute>
-                <Home />
-              </PrivateRoute>
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            <PrivateRoute>
+              <Home />
+            </PrivateRoute>
           }
         />
         <Route

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { collection, query, where, getDoc,doc } from "firebase/firestore";
+import { getDoc,doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import FormDetails from "../components/FormDetails.jsx";

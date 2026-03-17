@@ -32,7 +32,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
       setFolders(arr);
     });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser,userMeta]);
 
   const handleCreate = async () => {
     if (activeTab === "Form") {

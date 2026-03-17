@@ -56,6 +56,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         folderId: selectedFolder, 
        // timezone: timezone || null,
         userId: currentUser.uid,
+        vendorId: userMeta?.vendorId || currentUser.uid,
         createdAt: serverTimestamp(),
       };
 
@@ -87,6 +88,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
       const newFolder = {
         name: folderName.trim(),
         userId: currentUser.uid,
+        vendorId: userMeta?.vendorId || currentUser.uid,
         createdAt: serverTimestamp(),
       };
 

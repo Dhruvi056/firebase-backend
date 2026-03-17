@@ -7,7 +7,7 @@
 
   "functions": {
     "api/forms/[formId].js": {
-      "maxDuration": 10
+      "maxDuration": 30
     },
     "api/f/[formId].js": {
       "maxDuration": 30

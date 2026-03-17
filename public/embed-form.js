@@ -44,6 +44,15 @@
     }, 4000);
   }
 
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function handleSubmit(e) {
     const form = e.target;
     // Check both data attribute and action attribute
@@ -51,29 +60,83 @@
     if (!endpoint) {
       return; 
     }
-    // e.preventDefault();
-    // e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn && !submitBtn.dataset.originalText) {
-        submitBtn.dataset.originalText = submitBtn.textContent;
+      submitBtn.dataset.originalText = submitBtn.textContent;
     }
 
     try {
-      const body = new URLSearchParams(new FormData(form)).toString();
-      
-      console.log(" Submitting form to:", endpoint);
-      
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Accept": "application/json",
-        },
-        body,
-        credentials: "omit",
-        cache: "no-cache",
-      });
+      const formData = new FormData(form);
+      const hasFileInputs = Array.from(form.elements).some(
+        (el) => el.tagName === "INPUT" && el.type === "file"
+      );
+
+      let res;
+
+      if (hasFileInputs) {
+        const payload = {};
+        const filePromises = [];
+
+        for (const [name, value] of formData.entries()) {
+          if (value instanceof File) {
+            const file = value;
+            if (!file || !file.name || file.size === 0) {
+              continue;
+            }
+
+            filePromises.push(
+              readFileAsDataUrl(file).then((dataUrl) => {
+                payload[name] = {
+                  fileName: file.name,
+                  mimeType: file.type || "application/octet-stream",
+                  dataUrl,
+                };
+              })
+            );
+          } else {
+            if (payload[name] === undefined) {
+              payload[name] = value;
+            } else if (Array.isArray(payload[name])) {
+              payload[name].push(value);
+            } else {
+              payload[name] = [payload[name], value];
+            }
+          }
+        }
+
+        await Promise.all(filePromises);
+
+        console.log("Submitting form with file data to:", endpoint);
+
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+          credentials: "omit",
+          cache: "no-cache",
+        });
+      } else {
+        const body = new URLSearchParams(formData).toString();
+
+        console.log("Submitting form to:", endpoint);
+
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body,
+          credentials: "omit",
+          cache: "no-cache",
+        });
+      }
 
       let msg = "Submitted!";
       let ok = res.ok;
@@ -86,7 +149,7 @@
     } catch (err) {
       console.error(" Form submission error:", err);
       showToast("Network error: " + err.message, false);
-    } 
+    }
   }
 
   function attachToForm(form) {
@@ -94,7 +157,7 @@
     if (FORMS_ATTACHED.has(form)) return;
 
     const endpoint = form.getAttribute("data-firebase-form-endpoint");
-        // Only attach if endpoint looks like our API endpoint
+    // Only attach if endpoint looks like our API endpoint
     if (endpoint) {
       form.addEventListener("submit", handleSubmit, { capture: true });
       FORMS_ATTACHED.add(form);

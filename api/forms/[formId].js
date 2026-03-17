@@ -1,7 +1,15 @@
 import admin from "firebase-admin";
 import querystring from "querystring";
 import nodemailer from "nodemailer";
+import { v2 as cloudinary } from "cloudinary";
+import Busboy from "busboy";
 
+/* -------------------- Cloudinary Setup -------------------- */
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Initialize Firebase
 
@@ -43,22 +51,138 @@ if (!admin.apps.length) {
 }
 
 
-// Helper: Parse Body
+// Helper: Parse Body (supports multipart with file uploads)
 function parseBody(req) {
   const contentType = req.headers["content-type"] || "";
 
   if (contentType.includes("application/json")) {
-    return req.body;
+    const fields = {};
+    const files = [];
+
+    // Handle embedded dataUrl files from embed-form.js (JSON submissions)
+    if (req.body && typeof req.body === 'object') {
+      for (const [key, value] of Object.entries(req.body)) {
+        if (value && typeof value === 'object' && value.dataUrl) {
+          try {
+            const base64Data = value.dataUrl.split(',')[1];
+            if (base64Data) {
+              files.push({
+                fieldname: key,
+                originalname: value.fileName || "file",
+                mimetype: value.mimeType || "application/octet-stream",
+                buffer: Buffer.from(base64Data, "base64"),
+              });
+            }
+          } catch (e) {
+            console.error("Skipping failed base64 parse for:", key);
+          }
+        } else {
+          fields[key] = value;
+        }
+      }
+    }
+    return { fields, files };
   }
 
   if (contentType.includes("application/x-www-form-urlencoded")) {
     if (typeof req.body === "string") {
-      return querystring.parse(req.body);
+      return { fields: querystring.parse(req.body), files: [] };
     }
-    return req.body;
+    return { fields: req.body, files: [] };
   }
 
-  return {};
+  // Handle multipart/form-data using busboy
+  if (contentType.includes("multipart/form-data")) {
+    return new Promise((resolve, reject) => {
+      const fields = {};
+      const files = [];
+
+      const busboy = Busboy({ headers: req.headers });
+
+      busboy.on("field", (fieldname, val) => {
+        fields[fieldname] = val;
+      });
+
+      busboy.on("file", (fieldname, fileStream, info) => {
+        const { filename, mimeType } = info;
+        const chunks = [];
+
+        fileStream.on("data", (chunk) => {
+          chunks.push(chunk);
+        });
+
+        fileStream.on("end", () => {
+          files.push({
+            fieldname,
+            originalname: filename,
+            mimetype: mimeType,
+            buffer: Buffer.concat(chunks),
+          });
+        });
+      });
+
+      busboy.on("finish", () => {
+        resolve({ fields, files });
+      });
+
+      busboy.on("error", (err) => {
+        reject(err);
+      });
+
+      // Pipe the request to busboy
+      if (req.body && Buffer.isBuffer(req.body)) {
+        busboy.end(req.body);
+      } else if (typeof req.body === "string") {
+        busboy.end(Buffer.from(req.body));
+      } else {
+        req.pipe(busboy);
+      }
+    });
+  }
+
+  return { fields: {}, files: [] };
+}
+
+// Helper: Upload file buffer to Cloudinary
+function uploadToCloudinary(file, formId) {
+  return new Promise((resolve, reject) => {
+    const timestamp = Date.now();
+    const isPdf =
+        file.mimetype === "application/pdf" ||
+        file.originalname.toLowerCase().endsWith(".pdf");
+    const safeName = file.originalname || "file";
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: `forms/${formId}`,
+        // Raw files need their exact extension in public_id
+        public_id: isPdf ? `${timestamp}-${safeName}` : `${timestamp}-${safeName.replace(/\.[^/.]+$/, "")}`,
+        resource_type: isPdf ? "raw" : "auto", 
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary upload error:", error);
+          return reject(error);
+        }
+        console.log(` Uploaded to Cloudinary: ${result.secure_url}`);
+       const fileUrl =  result.secure_url.replace("/upload/", "/upload/fl_attachment/");
+         
+
+      resolve({
+        url: fileUrl,
+        publicId: result.public_id,
+        fieldname: file.fieldname,
+       });
+      }
+    );
+
+    // Pipe buffer to Cloudinary stream
+    const { Readable } = require("stream");
+    const readable = new Readable();
+    readable.push(file.buffer);
+    readable.push(null);
+    readable.pipe(uploadStream);
+  });
 }
 
 // Setup Nodemailer transporter
@@ -177,9 +301,14 @@ export default async function handler(req, res) {
 
   try {
    
-    const formData = parseBody(req);
+    const parsed = await parseBody(req);
+    const formData = parsed.fields || {};
+    const uploadedFiles = parsed.files || [];
 
-    if (!formData || Object.keys(formData).length === 0) {
+    if (
+      (!formData || Object.keys(formData).length === 0) &&
+      uploadedFiles.length === 0
+    ) {
       return res.status(400).json({
         error: "No form data received",
       });
@@ -193,6 +322,24 @@ export default async function handler(req, res) {
       }
       if (formData[key] !== "" && formData[key] !== null) {
         cleanData[key] = formData[key];
+      }
+    }
+
+    // Upload files to Cloudinary (if any)
+    if (uploadedFiles.length > 0) {
+      const uploadResults = await Promise.all(
+        uploadedFiles.map((file) => uploadToCloudinary(file, formId))
+      );
+
+      for (const result of uploadResults) {
+        const fieldName = result.fieldname || "file";
+        if (cleanData[fieldName] === undefined) {
+          cleanData[fieldName] = result.url;
+        } else if (Array.isArray(cleanData[fieldName])) {
+          cleanData[fieldName].push(result.url);
+        } else {
+          cleanData[fieldName] = [cleanData[fieldName], result.url];
+        }
       }
     }
 

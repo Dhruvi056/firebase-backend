@@ -2,6 +2,27 @@ import { useState, useEffect, useCallback } from "react";
 import { db } from "../firebase";
 import { collection, query, onSnapshot, orderBy, doc, getDoc, updateDoc } from "firebase/firestore";
 
+function isFileField(fieldName, value) {
+  if (!value || typeof value !== "string") return false;
+
+  const lowerField = (fieldName || "").toLowerCase();
+  const lowerValue = value.toLowerCase();
+
+  const looksLikeFileField =
+    lowerField.includes("file") ||
+    lowerField.includes("attachment") ||
+    lowerField.includes("resume") ||
+    lowerField.includes("document");
+
+  const looksLikeUrl = lowerValue.startsWith("http://") || lowerValue.startsWith("https://");
+
+  const looksLikeFileExtension = /\.(pdf|doc|docx|xls|xlsx|csv|txt|png|jpe?g|gif|zip|rar|webp)$/i.test(
+    value
+  );
+
+  return looksLikeFileField || looksLikeUrl || looksLikeFileExtension;
+}
+
 export default function FormDetails({ form }) {
   const [submissions, setSubmissions] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -20,26 +41,26 @@ export default function FormDetails({ form }) {
     }
   };
 
-  
-const loadCustomEmail = useCallback(async () => {
-  try {
-    if (!form?.formId) return;
 
-    const formDocRef = doc(db, "forms", form.formId);
-    const formDoc = await getDoc(formDocRef);
+  const loadCustomEmail = useCallback(async () => {
+    try {
+      if (!form?.formId) return;
 
-    if (formDoc.exists()) {
-      const formData = formDoc.data();
-      setCustomEmail(formData.notificationEmail || "");
+      const formDocRef = doc(db, "forms", form.formId);
+      const formDoc = await getDoc(formDocRef);
+
+      if (formDoc.exists()) {
+        const formData = formDoc.data();
+        setCustomEmail(formData.notificationEmail || "");
+      }
+    } catch (error) {
+      console.error("Error loading custom email:", error);
     }
-  } catch (error) {
-    console.error("Error loading custom email:", error);
-  }
-}, [form?.formId]);
+  }, [form?.formId]);
 
-useEffect(() => {
-  loadCustomEmail();
-}, [loadCustomEmail]);
+  useEffect(() => {
+    loadCustomEmail();
+  }, [loadCustomEmail]);
 
 
   const saveCustomEmail = async () => {
@@ -323,18 +344,45 @@ useEffect(() => {
                   <tr key={sub.id} className="border-t hover:bg-gray-50">
                     {fields.map((f) => {
                       const value = sub.data?.[f];
-                      let displayValue = "-";
+
+                      let cellContent = "-";
+
                       if (value !== undefined && value !== null && value !== "") {
                         if (Array.isArray(value)) {
-                          displayValue = value.join(", ");
+                          cellContent = value.join(", ");
                         } else if (typeof value === "object") {
-                          displayValue = JSON.stringify(value);
+                          cellContent = JSON.stringify(value);
                         } else {
-                          displayValue = String(value);
+                          const stringValue = String(value);
+
+                          if (isFileField(f, stringValue)) {
+                            const linkHref = stringValue;
+                            const fileName =
+                              stringValue.split("/").pop() ||
+                              stringValue.split("\\").pop() ||
+                              stringValue;
+
+                            cellContent = (
+                              <a
+                                href={linkHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {fileName}
+                              </a>
+                            );
+                          } else {
+                            cellContent = stringValue;
+                          }
                         }
                       }
+
                       return (
-                        <td key={f} className="px-4 py-2 text-sm">{displayValue}</td>
+                        <td key={f} className="px-4 py-2 text-sm">
+                          {cellContent}
+                        </td>
                       );
                     })}
                     <td className="px-4 py-2 text-gray-500 text-sm">{sub.submittedAt}</td>

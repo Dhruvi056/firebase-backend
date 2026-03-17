@@ -11,7 +11,7 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
   const [folders, setFolders] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState({});
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout,userMeta} = useAuth();
   const { addToast } = useToast();
 
   // Close logout menu when clicking outside
@@ -28,42 +28,48 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
   // Fetch forms from Firestore for current user only
   useEffect(() => {
     if (!currentUser) return;
-    
-    const unsub = onSnapshot(
-      query(collection(db, "forms"), where("userId", "==", currentUser.uid)), 
-      (snap) => {
-        const arr = [];
-        snap.forEach((doc) => {
-          arr.push({
-            formId: doc.id,  // Document ID as formId
-            ...doc.data()
-          });
+
+    let qRef = collection(db, "forms");
+
+    if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((docSnap) => {
+        arr.push({
+          formId: docSnap.id,
+          ...docSnap.data(),
         });
-        setForms(arr);
-      }
-    );
+      });
+      setForms(arr);
+    });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser, userMeta]);
 
   // Fetch folders from Firestore for current user only
   useEffect(() => {
     if (!currentUser) return;
-    
-    const unsub = onSnapshot(
-      query(collection(db, "folders"), where("userId", "==", currentUser.uid)), 
-      (snap) => {
-        const arr = [];
-        snap.forEach((doc) => {
-          arr.push({
-            id: doc.id,  // Document ID as id
-            ...doc.data()
-          });
+
+    let qRef = collection(db, "folders");
+
+    if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((docSnap) => {
+        arr.push({
+          id: docSnap.id,
+          ...docSnap.data(),
         });
-        setFolders(arr);
-      }
-    );
+      });
+      setFolders(arr);
+    });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser, userMeta]);
 
   const homeActive = !selectedForm;
 

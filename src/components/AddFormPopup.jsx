@@ -13,20 +13,24 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
   const [selectedFolder, setSelectedFolder] = useState("");
   //const [timezone, setTimezone] = useState("");
   const [folders, setFolders] = useState([]);
-  const { currentUser } = useAuth();
+  const { currentUser,userMeta } = useAuth( );
 
   // Fetch folders
   useEffect(() => {
     if (!currentUser) return;
 
-    const unsub = onSnapshot(
-      query(collection(db, "folders"), where("userId", "==", currentUser.uid)),
-      (snap) => {
-        const arr = [];
-        snap.forEach((doc) => arr.push({ id: doc.id, ...doc.data() }));
-        setFolders(arr);
-      }
-    );
+    let qRef = collection(db, "folders");
+
+    if (userMeta?.role === "vendor_admin" && userMeta.vendorId) {
+      qRef = query(qRef, where("vendorId", "==", userMeta.vendorId));
+    } else if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((snapDoc) => arr.push({ id: snapDoc.id, ...snapDoc.data() }));
+      setFolders(arr);
+    });
     return () => unsub();
   }, [currentUser]);
 

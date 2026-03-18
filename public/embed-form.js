@@ -9,6 +9,9 @@
   const TOAST_ID = "__firebase_form_toast__";
   const FORMS_ATTACHED = new WeakSet();
 
+  const SCRIPT_URL = document.currentScript?.src || "";
+  const BASE_URL = SCRIPT_URL.split("/embed-form.js")[0];
+
   function ensureToastContainer() {
     let t = document.getElementById(TOAST_ID);
     if (!t) {
@@ -55,13 +58,15 @@
 
   async function handleSubmit(e) {
     const form = e.target;
-    // Check both data attribute and action attribute
-    const endpoint = form.getAttribute("data-firebase-form-endpoint");
-    if (!endpoint) {
-      return; 
-    }
+
+    // ✅ NEW: use only formId
+    const formId = form.getAttribute("data-form-id");
+    if (!formId) return;
+
     e.preventDefault();
     e.stopPropagation();
+
+    const endpoint = `${BASE_URL}/api/forms/${formId}`;
 
     const submitBtn = form.querySelector("[type=submit]");
     if (submitBtn && !submitBtn.dataset.originalText) {
@@ -142,10 +147,13 @@
       let ok = res.ok;
       try {
         const json = await res.json();
-        msg = json.message || json.success || msg;
-      } catch (_) {
-      }
-      showToast(ok ? msg : "Failed to submit to backend", ok);
+        msg = json.message || msg;
+      } catch (_) {}
+
+      showToast(ok ? msg : "Submission failed", ok);
+
+      if (ok) form.reset();
+
     } catch (err) {
       console.error(" Form submission error:", err);
       showToast("Network error: " + err.message, false);
@@ -156,13 +164,13 @@
     // Skip if already attached
     if (FORMS_ATTACHED.has(form)) return;
 
-    const endpoint = form.getAttribute("data-firebase-form-endpoint");
-    // Only attach if endpoint looks like our API endpoint
-    if (endpoint) {
-      form.addEventListener("submit", handleSubmit, { capture: true });
-      FORMS_ATTACHED.add(form);
-      console.log("Form handler attached to:", endpoint);
-    }
+    const formId = form.getAttribute("data-form-id");
+    if (!formId) return;
+
+    form.addEventListener("submit", handleSubmit, { capture: true });
+    FORMS_ATTACHED.add(form);
+
+    console.log("Attached form:", formId);
   }
 
   function attach() {

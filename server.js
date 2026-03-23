@@ -279,13 +279,11 @@ app.post("/api/forms/:formId", upload.any(), handleFormSubmit);
 app.post("/api/f/:formId", upload.any(), handleFormSubmit);
 
 /* -------------------- Serve React (Production) -------------------- */
+app.use(express.static(path.join(__dirname, "build")));
 
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "build")));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "build", "index.html"));
-  });
-}
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "build", "index.html"));
+});
 
 /* -------------------- Start Server -------------------- */
 

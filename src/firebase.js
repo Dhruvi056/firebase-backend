@@ -20,8 +20,6 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
     projectId: !firebaseConfig.projectId,
     authDomain: firebaseConfig.authDomain,
   });
-} else {
-  console.log("Firebase initialized with project:", firebaseConfig.projectId);
 }
 
 const app = initializeApp(firebaseConfig);

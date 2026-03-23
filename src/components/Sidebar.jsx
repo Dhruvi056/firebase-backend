@@ -1,5 +1,5 @@
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -10,9 +10,12 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
   const [forms, setForms] = useState([]);
   const [folders, setFolders] = useState([]);
   const [expandedFolders, setExpandedFolders] = useState({});
+  const [newSubmissionCounts, setNewSubmissionCounts] = useState({});
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-  const { currentUser, logout,userMeta} = useAuth();
+  const { currentUser,userMeta} = useAuth();
   const { addToast } = useToast();
+  const submissionUnsubsRef = useRef({});
+  const initializedSubmissionListenersRef = useRef({});
 
   // Close logout menu when clicking outside
   useEffect(() => {
@@ -73,12 +76,6 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
 
   const homeActive = !selectedForm;
 
-  // Debug logs
-  useEffect(() => {
-    console.log("Folders:", folders);
-    console.log("Forms:", forms);
-  }, [folders, forms]);
-
   // Group forms by folder
   const formsByFolder = {};
   
@@ -97,169 +94,233 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
     }
   });
 
-  console.log("Forms by folder:", formsByFolder);
-
-  // Separate forms with and without folder
   const formsWithoutFolder = forms.filter(form => !form.folderId);
 
+  // Listen for new submissions per form and keep unread counts
+  useEffect(() => {
+    const activeFormIds = new Set(forms.map((f) => f.formId));
+
+    // Remove listeners for forms that no longer exist in sidebar
+    Object.keys(submissionUnsubsRef.current).forEach((formId) => {
+      if (!activeFormIds.has(formId)) {
+        submissionUnsubsRef.current[formId]();
+        delete submissionUnsubsRef.current[formId];
+        delete initializedSubmissionListenersRef.current[formId];
+        setNewSubmissionCounts((prev) => {
+          const next = { ...prev };
+          delete next[formId];
+          return next;
+        });
+      }
+    });
+
+    forms.forEach((form) => {
+      if (submissionUnsubsRef.current[form.formId]) return;
+
+      const submissionsRef = collection(db, `forms/${form.formId}/submissions`);
+      const submissionsQuery = query(submissionsRef, orderBy("submittedAt", "desc"));
+
+      submissionUnsubsRef.current[form.formId] = onSnapshot(submissionsQuery, (snap) => {
+        // Ignore initial snapshot to avoid counting historical rows as "new"
+        if (!initializedSubmissionListenersRef.current[form.formId]) {
+          initializedSubmissionListenersRef.current[form.formId] = true;
+          return;
+        }
+
+        const addedCount = snap.docChanges().filter((change) => change.type === "added").length;
+
+        if (addedCount <= 0) return;
+        if (selectedForm?.formId === form.formId) return;
+
+        setNewSubmissionCounts((prev) => ({
+          ...prev,
+          [form.formId]: (prev[form.formId] || 0) + addedCount,
+        }));
+
+        addToast(
+          `${addedCount} new submission${addedCount > 1 ? "s" : ""} in ${form.name}`,
+          "info"
+        );
+      });
+    });
+  }, [forms, selectedForm?.formId, addToast]);
+
+  // Clear unread count for currently opened form
+  useEffect(() => {
+    const activeFormId = selectedForm?.formId;
+    if (!activeFormId) return;
+
+    setNewSubmissionCounts((prev) => {
+      if (!prev[activeFormId]) return prev;
+      const next = { ...prev };
+      delete next[activeFormId];
+      return next;
+    });
+  }, [selectedForm?.formId]);
+
+  // Cleanup listeners on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(submissionUnsubsRef.current).forEach((unsub) => unsub());
+      submissionUnsubsRef.current = {};
+      initializedSubmissionListenersRef.current = {};
+    };
+  }, []);
+
+  // Helper component to render Lucide icons safely in React
+  const LucideIcon = ({ name, className = "" }) => {
+    useEffect(() => {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }, [name]);
+    
+    return (
+      <span 
+        className="d-inline-flex align-items-center justify-content-center"
+        dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}" class="${className}" stroke-width="2"></i>` }}
+      />
+    );
+  };
+
   return (
-    <aside className="w-[250px] h-full bg-gray-100 rounded-3xl border border-gray-200 shadow-sm flex flex-col">
-      <div className="px-6 pt-6 pb-4 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-gray-900">Forms</h1>
+    <nav className="sidebar">
+      <div className="sidebar-header">
+        <div className="sidebar-brand">
+          CS <span>Formly</span>
+        </div>
+        <div className="sidebar-toggler" style={{ color: '#7987a1', display: 'flex' }} onClick={() => document.body.classList.toggle('sidebar-folded')}>
+          <LucideIcon name="menu" className="icon-md" />
+        </div>
       </div>
+      <div className="sidebar-body">
+        <ul className="nav" id="sidebarNav">
+          <li className="nav-item nav-category">Forms & Folders</li>
+          
+          <li className="nav-item">
+            <button
+              onClick={() => setShowPopup(true)}
+              className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
+              style={{ color: 'inherit', textDecoration: 'none' }}
+            >
+              <LucideIcon name="plus-circle" className="link-icon" />
+              <span className="link-title">Create...</span>
+            </button>
+          </li>
 
-      <div className="flex-1 overflow-y-auto px-6" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
-        <style>{`
-          aside::-webkit-scrollbar {
-            width: 8px;
-          }
-          aside::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 4px;
-          }
-          aside::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-          }
-          aside::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-          }
-        `}</style>
-        <button
-          onClick={() => setShowPopup(true)}
-          className="w-full text-left text-sm font-semibold text-gray-800 bg-gray-200 hover:bg-gray-300 transition-colors px-4 py-3 rounded-2xl flex items-center gap-2"
-        >
-          <span>+</span>
-          <span>Create...</span>
-        </button>
+          <li className={`nav-item ${homeActive ? 'active' : ''}`}>
+            <button
+              onClick={() => onSelectForm(null)}
+              className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
+              style={{ color: homeActive ? 'var(--nobleui-primary)' : 'inherit', textDecoration: 'none' }}
+            >
+              <LucideIcon name="home" className="link-icon" />
+              <span className="link-title">Home</span>
+            </button>
+          </li>
 
-        <button
-          onClick={() => onSelectForm(null)}
-          className={`mt-4 w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors ${
-            homeActive
-              ? "bg-blue-500 text-black shadow"
-              : "text-gray-800 hover:bg-gray-200"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${homeActive ? "bg-blue-600" : "bg-gray-400"}`}></span>
-          Home
-        </button>
-
-        {formsWithoutFolder.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Without Folder
-            </h3>
-            <div className="flex flex-col gap-1.5">
+          {formsWithoutFolder.length > 0 && (
+            <>
+              <li className="nav-item nav-category">Direct Forms</li>
               {formsWithoutFolder.map((f) => {
                 const isSelected = selectedForm?.formId === f.formId;
+                const unreadCount = newSubmissionCounts[f.formId] || 0;
                 return (
-                  <button
-                    key={f.formId}
-                    onClick={() => onSelectForm(f)}
-                    className={`text-left text-sm px-3 py-2 rounded-xl transition-colors ${
-                      isSelected
-                        ? "bg-gray-300 text-black"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    {f.name}
-                  </button>
+                  <li key={f.formId} className={`nav-item ${isSelected ? 'active' : ''}`}>
+                    <button
+                      onClick={() => onSelectForm(f)}
+                      className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center justify-content-between"
+                      style={{ color: isSelected ? 'var(--nobleui-primary)' : '#4d5969', textDecoration: 'none', paddingLeft: '45px' }}
+                    >
+                      <span className="link-title text-truncate">{f.name}</span>
+                      {unreadCount > 0 && (
+                        <span className="badge rounded-pill bg-primary ms-2">{unreadCount}</span>
+                      )}
+                    </button>
+                  </li>
                 );
               })}
-            </div>
-          </div>
-        )}
+            </>
+          )}
 
-        {/* Folders Section */}
-        {folders.map((folder) => {
-          const folderForms = formsByFolder[folder.id] || [];
-          const isFolderExpanded = expandedFolders[folder.id];
-          
-          return (
-            <div key={folder.id} className="mt-4">
-              <button
-                onClick={() => setExpandedFolders(prev => ({
-                  ...prev,
-                  [folder.id]: !isFolderExpanded
-                }))}
-                className="w-full flex items-center justify-between text-sm font-semibold text-gray-700 hover:bg-gray-200 px-2 py-1.5 rounded-lg"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-xs">{isFolderExpanded ? "▼" : "▶"}</span>
-                  <span>{folder.name}</span>
-                </div>
-                <span className="text-xs bg-gray-300 text-gray-700 px-2 py-0.5 rounded-full">
-                  {folderForms.length}
-                </span>
-              </button>
-
-              {isFolderExpanded && (
-                <div className="mt-1 ml-4 pl-2 border-l border-gray-300 flex flex-col gap-1">
-                  {folderForms.length === 0 ? (
-                    <p className="text-xs text-gray-500 italic px-2 py-1">
-                      No forms in this folder
-                    </p>
-                  ) : (
-                    folderForms.map((f) => {
-                      const isSelected = selectedForm?.formId === f.formId;
-                      return (
-                        <button
-                          key={f.formId}
-                          onClick={() => onSelectForm(f)}
-                          className={`text-left text-sm px-3 py-2 rounded-xl transition-colors ${
-                            isSelected
-                              ? "bg-gray-300 text-black font-medium"
-                              : "text-gray-700 hover:bg-gray-100"
-                          }`}
-                        >
-                          {f.name}
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-auto px-6 pb-6 pt-6 border-t border-gray-200 relative logout-menu-container">
-        <div className="flex items-center justify-between pt-1 text-sm text-gray-700">
-          <div className="flex items-center gap-3">
-            <span>{currentUser?.email || "User"}</span>
-          </div>
-          <button
-            onClick={() => setShowLogoutMenu(!showLogoutMenu)}
-            className="p-1 hover:bg-gray-200 rounded-full transition-colors"
-          >
-            <span className="text-gray-600 text-sm">⋯</span>
-          </button>
-        </div>
-
-        {showLogoutMenu && (
-          <div className="absolute bottom-16 right-6 bg-white rounded-lg shadow-lg border border-gray-200 p-2 min-w-[120px] z-50">
-            <button
-              onClick={async () => {
-                try {
-                  await logout();
-                  addToast('Logged out successfully!', 'info');
-                  setShowLogoutMenu(false);
-                } catch (error) {
-                  console.error("Failed to logout:", error);
-                  addToast('Failed to log out', 'error');
-                }
-              }}
-              className="w-full text-left px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors text-sm font-semibold"
-            >
-              Logout
-            </button>
-          </div>
-        )}
+          {folders.length > 0 && (
+            <>
+              <li className="nav-item nav-category">Folders</li>
+              {folders.map((folder) => {
+                const folderForms = formsByFolder[folder.id] || [];
+                const isFolderExpanded = expandedFolders[folder.id];
+                const folderUnreadCount = folderForms.reduce(
+                  (total, form) => total + (newSubmissionCounts[form.formId] || 0),
+                  0
+                );
+                
+                return (
+                  <li key={folder.id} className="nav-item">
+                    <button
+                      className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center justify-content-between"
+                      onClick={() => setExpandedFolders(prev => ({
+                        ...prev,
+                        [folder.id]: !isFolderExpanded
+                      }))}
+                      style={{ color: '#4d5969', textDecoration: 'none' }}
+                    >
+                      <div className="d-flex align-items-center overflow-hidden">
+                        <LucideIcon name={isFolderExpanded ? "folder-open" : "folder"} className="link-icon" />
+                        <span className="link-title text-truncate">{folder.name}</span>
+                        {folderUnreadCount > 0 && (
+                          <span className="badge rounded-pill bg-primary ms-2">{folderUnreadCount}</span>
+                        )}
+                      </div>
+                      <div 
+                        className="link-arrow" 
+                        style={{ 
+                          transform: isFolderExpanded ? 'rotate(180deg)' : 'rotate(0deg)', 
+                          transition: 'transform 0.2s',
+                          visibility: folderForms.length >= 0 ? 'visible' : 'hidden',
+                          display: 'inline-flex'
+                        }}
+                      >
+                        <LucideIcon name="chevron-down" />
+                      </div>
+                    </button>
+                    
+                    {isFolderExpanded && (
+                      <ul className="nav sub-menu" style={{ display: 'block', borderLeft: 'none', marginLeft: '25px', padding: '5px 0' }}>
+                        {folderForms.length === 0 ? (
+                          <li className="nav-item">
+                            <span className="nav-link disabled py-1 fs-12px text-muted italic">No forms</span>
+                          </li>
+                        ) : (
+                          folderForms.map((f) => {
+                            const isSelected = selectedForm?.formId === f.formId;
+                            const unreadCount = newSubmissionCounts[f.formId] || 0;
+                            return (
+                              <li key={f.formId} className="nav-item">
+                                <button
+                                  onClick={() => onSelectForm(f)}
+                                  className={`nav-link btn btn-link w-100 text-start border-0 py-1 fs-13px d-flex align-items-center justify-content-between ${isSelected ? 'text-primary fw-bold' : ''}`}
+                                  style={{ color: isSelected ? 'var(--nobleui-primary)' : '#4d5969', textDecoration: 'none' }}
+                                >
+                                  <span className="text-truncate">{f.name}</span>
+                                  {unreadCount > 0 && (
+                                    <span className="badge rounded-pill bg-primary ms-2">{unreadCount}</span>
+                                  )}
+                                </button>
+                              </li>
+                            );
+                          })
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </>
+          )}
+        </ul>
       </div>
 
       {showPopup && <AddFormPopup onClose={() => setShowPopup(false)} onSelectForm={onSelectForm} />}
-    </aside>
+    </nav>
   );
 }

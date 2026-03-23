@@ -5,6 +5,7 @@ import { ToastProvider } from "./context/ToastContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import { Toaster } from "react-hot-toast";
 
 function PrivateRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -143,8 +144,21 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    // Initialize theme from localStorage or preferred scheme
+    const savedTheme = localStorage.getItem('theme');
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const initialTheme = savedTheme || systemTheme;
+    
+    document.documentElement.setAttribute('data-bs-theme', initialTheme);
+    if (!savedTheme) {
+      localStorage.setItem('theme', initialTheme);
+    }
+  }, []);
+
   return (
     <ToastProvider>
+      <Toaster position="top-right" />
       <Router basename="/">
         <AuthProvider>
           <AppRoutes />

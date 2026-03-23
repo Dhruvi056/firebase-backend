@@ -33,54 +33,60 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-600/80 px-4">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-xl p-8 relative">
-        <button
-          onClick={() => navigate("/login")}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-        >
-          ✕
-        </button>
+    <div className="main-wrapper">
+      <div className="page-wrapper full-page">
+        <div className="page-content container-xxl d-flex align-items-center justify-content-center">
 
-        <div className="flex justify-center mb-4">
-          <div className="w-14 h-14 flex items-center justify-center rounded-full bg-blue-100">
-            🔒
+          <div className="row w-100 mx-0 auth-page">
+            <div className="col-md-10 col-lg-8 col-xl-6 mx-auto">
+              <div className="card shadow-sm border-0">
+                <div className="row">
+                  <div className="col-md-4 pe-md-0">
+                    <div className="auth-side-wrapper" style={{ backgroundImage: "url(/assets/images/photos/img6.jpg)" }}>
+                    </div>
+                  </div>
+                  <div className="col-md-8 ps-md-0">
+                    <div className="auth-form-wrapper px-4 py-5 text-center">
+                      <div className="nobleui-logo d-block mb-2 text-start">Headless<span>Form</span></div>
+                      <div className="mb-4 d-inline-block p-3 bg-primary-subtle rounded-circle mx-auto">
+                        <i className="text-primary fs-1" data-lucide="lock"></i>
+                      </div>
+                      <h4 className="fw-bold mb-2">Reset Password</h4>
+                      <p className="text-secondary mb-4">Enter your new password below.</p>
+
+                      <div className="mb-3 text-start">
+                        <label className="form-label fw-semibold">New Password</label>
+                        <input 
+                          type="password" 
+                          className="form-control" 
+                          placeholder="At least 6 characters"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                        />
+                      </div>
+                      
+                      <button 
+                        onClick={handleReset}
+                        disabled={loading}
+                        className="btn btn-primary w-100 py-2 mb-3 shadow-sm"
+                      >
+                        {loading ? "Saving..." : "Save Password"}
+                      </button>
+                      
+                      <button 
+                        type="button" 
+                        className="btn btn-link text-secondary text-decoration-none"
+                        onClick={() => navigate("/login")}
+                      >
+                        ← Back to Login
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <h2 className="text-2xl font-bold text-center text-gray-900">
-          Reset Password
-        </h2>
-
-        <p className="text-center text-sm text-gray-500 mt-2 mb-6">
-          Enter your new password
-        </p>
-
-        <input
-          type="password"
-          placeholder="New password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm
-          focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-
-        <button
-          onClick={handleReset}
-          disabled={loading}
-          className="w-full mt-4 py-3 rounded-xl bg-blue-600 text-white font-semibold
-          hover:bg-blue-700 disabled:bg-blue-300"
-        >
-          {loading ? "Saving..." : "Save Password"}
-        </button>
-
-        <div className="text-center mt-6">
-          <button
-            onClick={() => navigate("/login")}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-             Back to Login
-          </button>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { collection, doc, serverTimestamp, setDoc, query, where } from "firebase/firestore";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { generateFormId } from "../utils/generateFormId";
@@ -11,9 +12,28 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
   const [formName, setFormName] = useState("");
   const [folderName, setFolderName] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
-  //const [timezone, setTimezone] = useState("");
   const [folders, setFolders] = useState([]);
+  const [forms, setForms] = useState([]);
+  const [formError, setFormError] = useState("");
+  const [folderError, setFolderError] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const { currentUser,userMeta } = useAuth( );
+
+  // Helper component to render Lucide icons safely in React
+  const LucideIcon = ({ name, className = "" }) => {
+    useEffect(() => {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }, [name]);
+    
+    return (
+      <span 
+        className="d-inline-flex align-items-center justify-content-center"
+        dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}" class="${className}" stroke-width="1.5"></i>` }}
+      />
+    );
+  };
 
   // Fetch folders
   useEffect(() => {
@@ -34,15 +54,51 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
     return () => unsub();
   }, [currentUser,userMeta]);
 
+  // Fetch forms for duplicate-name check
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let qRef = collection(db, "forms");
+
+    if (userMeta?.role === "vendor_admin" && userMeta.vendorId) {
+      qRef = query(qRef, where("vendorId", "==", userMeta.vendorId));
+    } else if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((snapDoc) => arr.push({ id: snapDoc.id, ...snapDoc.data() }));
+      setForms(arr);
+    });
+    return () => unsub();
+  }, [currentUser, userMeta]);
+
+  const isNameTaken = (name) => {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return false;
+
+    const formExists = forms.some((f) => (f.name || "").trim().toLowerCase() === normalized);
+    const folderExists = folders.some((f) => (f.name || "").trim().toLowerCase() === normalized);
+    return formExists || folderExists;
+  };
+
   const handleCreate = async () => {
+    if (isCreating) return;
+
     if (activeTab === "Form") {
       if (!formName.trim()) {
-        alert("Please enter a form endpoint name");
+        setFormError("Please enter a form endpoint name.");
         return;
       }
 
       if (!selectedFolder) {
-        alert("Please select a folder for your form");
+        setFormError("Please select a folder for your form.");
+        return;
+      }
+
+      if (isNameTaken(formName)) {
+        setFormError("This name already exists. Please use a different name.");
         return;
       }
 
@@ -54,17 +110,16 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         formId: id,
         url: formUrl,
         folderId: selectedFolder, 
-       // timezone: timezone || null,
         userId: currentUser.uid,
         vendorId: userMeta?.vendorId || currentUser.uid,
         createdAt: serverTimestamp(),
       };
 
-      console.log("Creating form with data:", newForm);
       
       try {
+        setIsCreating(true);
         await setDoc(doc(collection(db, "forms"), id), newForm);
-        console.log("Form created successfully");
+
 
         if (onSelectForm) {
           onSelectForm({
@@ -76,11 +131,18 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         }
       } catch (error) {
         console.error("Error creating form:", error);
-        alert("Error creating form: " + error.message);
+        setFormError("Error creating form: " + error.message);
+        setIsCreating(false);
+        return;
       }
     } else {
       if (!folderName.trim()) {
-        alert("Please enter a folder name");
+        setFolderError("Please enter a folder name.");
+        return;
+      }
+
+      if (isNameTaken(folderName)) {
+        setFolderError("This name already exists. Please use a different name.");
         return;
       }
 
@@ -92,146 +154,171 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
         createdAt: serverTimestamp(),
       };
 
-      console.log("Creating folder with data:", newFolder);
       
       try {
+        setIsCreating(true);
         await setDoc(doc(collection(db, "folders"), folderId), newFolder);
-        console.log("Folder created successfully");
+
       } catch (error) {
         console.error("Error creating folder:", error);
-        alert("Error creating folder: " + error.message);
+        setFolderError("Error creating folder: " + error.message);
+        setIsCreating(false);
+        return;
       }
     }
 
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4 z-[100]">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-xl p-8 space-y-6 animate-fadeIn">
-
-        {/* Header */}
-        <h2 className="text-2xl font-semibold text-gray-900">Create...</h2>
-
-        {/* Tabs */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab("Form")}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              activeTab === "Form"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Form
-          </button>
-          <button
-            onClick={() => setActiveTab("Folder")}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              activeTab === "Folder"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Folder
-          </button>
-        </div>
-
-        {/* Form Tab Content */}
-        {activeTab === "Form" && (
-          <>
-            <p className="text-sm text-gray-600">
-              Add a descriptive name and set a timezone to create your form endpoint.
-            </p>
-
-            <div className="space-y-4">
-              {/* Folder Dropdown */}
+  const modalMarkup = (
+    <div
+      className="modal show d-block"
+      tabIndex="-1"
+      style={{
+        backgroundColor: "rgba(0,0,0,0.5)",
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+      }}
+    >
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content border-0 shadow-lg">
+          <div className="modal-header border-bottom-0 pb-0 pt-4 px-4 bg-transparent">
+            <div className="d-flex align-items-center">
+              <div className="bg-primary p-2 rounded-circle me-3 d-flex align-items-center justify-content-center" style={{ width: '38px', height: '38px' }}>
+                <LucideIcon name="plus" className="text-white icon-sm" />
+              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">
-                  Folder
-                </label>
-                <select
-                  value={selectedFolder}
-                  onChange={(e) => setSelectedFolder(e.target.value)}
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-                  required
+                <h5 className="modal-title fw-bold text-body mb-0">Create New...</h5>
+                <p className="text-muted fs-12px mb-0">Add a new endpoint or organize with folders</p>
+              </div>
+            </div>
+            <button type="button" className="btn-close shadow-none" aria-label="Close" onClick={onClose}></button>
+          </div>
+          <div className="modal-body p-4 pt-4">
+            <ul className="nav nav-tabs nav-tabs-line mb-4" id="lineTab" role="tablist">
+              <li className="nav-item">
+                <button 
+                  className={`nav-link ${activeTab === "Form" ? "active" : ""}`} 
+                  onClick={() => {
+                    setActiveTab("Form");
+                    setFormError("");
+                  }}
+                  type="button"
+                  role="tab"
                 >
-                  <option value="">Select a Folder (required)</option>
-                  {folders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  Form Endpoint
+                </button>
+              </li>
+              <li className="nav-item">
+                <button 
+                  className={`nav-link ${activeTab === "Folder" ? "active" : ""}`} 
+                  onClick={() => {
+                    setActiveTab("Folder");
+                    setFolderError("");
+                  }}
+                  type="button"
+                  role="tab"
+                >
+                  Folder
+                </button>
+              </li>
+            </ul>
 
-              {/* Form Endpoint Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">
-                  Form Endpoint Name
-                </label>
-                <input
-                  type="text"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-                  placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Form Endpoint Name (e.g. job-application)"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  required
-                />
-              </div>
+            <div className="tab-content mt-3">
+              {activeTab === "Form" && (
+                <div className="tab-pane fade show active">
+                  <p className="text-muted mb-4 small">
+                    Add a descriptive name and select a folder to create your form endpoint.
+                  </p>
+                  <form className="forms-sample">
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Folder</label>
+                      <select
+                        value={selectedFolder}
+                        onChange={(e) => {
+                          setSelectedFolder(e.target.value);
+                          setFormError("");
+                        }}
+                        className="form-select"
+                        required
+                      >
+                        <option value="">Select a Folder (required)</option>
+                        {folders.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            {folder.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Form Endpoint Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. job-application"
+                        value={formName}
+                        onChange={(e) => {
+                          setFormName(e.target.value);
+                          setFormError("");
+                        }}
+                        required
+                      />
+                      {formError && (
+                        <div className="text-danger mt-1 small">{formError}</div>
+                      )}
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {activeTab === "Folder" && (
+                <div className="tab-pane fade show active">
+                  <p className="text-muted mb-4 small">
+                    Enter a folder name to organize your forms.
+                  </p>
+                  <form className="forms-sample">
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Folder Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Project Alpha"
+                        value={folderName}
+                        onChange={(e) => {
+                          setFolderName(e.target.value);
+                          setFolderError("");
+                        }}
+                        required
+                      />
+                      {folderError && (
+                        <div className="text-danger mt-1 small">{folderError}</div>
+                      )}
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
-          </>
-        )}
-
-        {/* Folder Tab Content */}
-        {activeTab === "Folder" && (
-          <>
-            <p className="text-sm text-gray-600">
-              Enter a folder name.
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">
-                  Folder Name
-                </label>
-                <input
-                  type="text"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-                  placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Folder Name (e.g. job-application)"
-                  value={folderName}
-                  onChange={(e) => setFolderName(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-gray-700 
-            hover:bg-gray-100 transition"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-
-          <button
-            className="px-6 py-2.5 rounded-2xl bg-blue-600 text-white text-sm font-semibold 
-            hover:bg-blue-700 disabled:bg-blue-300 transition"
-            onClick={handleCreate}
-            disabled={activeTab === "Form" ? !formName.trim() || !selectedFolder : !folderName.trim()}
-          >
-            Create
-          </button>
+          </div>
+          <div className="modal-footer border-top-0 pt-0">
+            <button type="button" className="btn btn-link text-secondary text-decoration-none me-2" onClick={onClose}>Cancel</button>
+            <button
+              type="button"
+              className="btn btn-primary px-4 d-flex align-items-center"
+              onClick={handleCreate}
+              disabled={
+                isCreating ||
+                (activeTab === "Form" ? !formName.trim() || !selectedFolder : !folderName.trim())
+              }
+            >
+              <LucideIcon name="plus" className="icon-sm me-1" />
+              {isCreating ? "Creating..." : `Create ${activeTab}`}
+            </button>
+          </div>
         </div>
-
       </div>
     </div>
   );
+
+  return createPortal(modalMarkup, document.body);
 }

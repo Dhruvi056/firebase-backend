@@ -1,141 +1,281 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthWithToast } from "../hooks/useAuthWithToast";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 
 export default function Signup() {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(false);
   const { signup } = useAuthWithToast();
   const navigate = useNavigate();
 
+  // Helper component to render Lucide icons safely
+  const LucideIcon = ({ name, className = "", style = {} }) => {
+    useEffect(() => {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }, [name]);
+    
+    return (
+      <span 
+        className={`d-inline-flex align-items-center justify-content-center ${className}`}
+        style={style}
+        dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}"></i>` }}
+      />
+    );
+  };
+
+  const [fieldErrors, setFieldErrors] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    terms: "",
+  });
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+
   async function handleSubmit(e) {
     e.preventDefault();
+    setFieldErrors({
+      fullName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      terms: "",
+    });
+    setFormError("");
 
-    if (password !== confirmPassword) {
-      return setError("Passwords do not match");
+    const newFieldErrors = {
+      fullName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      terms: "",
+    };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!fullName.trim()) {
+      newFieldErrors.fullName = "Full name is required.";
     }
 
-    if (password.length < 6) {
-      return setError("Password must be at least 6 characters long");
+    if (!email.trim()) {
+      newFieldErrors.email = "Email is required.";
+    } else if (!emailRegex.test(email.trim())) {
+      newFieldErrors.email = "Please enter a valid email address.";
+    }
+
+    if (!password) {
+      newFieldErrors.password = "Password is required.";
+    } else if (password.length < 6) {
+      newFieldErrors.password = "Password must be at least 6 characters long.";
+    }
+
+    if (!confirmPassword) {
+      newFieldErrors.confirmPassword = "Confirm password is required.";
+    } else if (password !== confirmPassword) {
+      newFieldErrors.confirmPassword = "Password and confirm password must match.";
+    }
+
+    if (!agreeToTerms) {
+      newFieldErrors.terms = "Please accept terms and conditions.";
+    }
+
+    const hasFieldErrors = Object.values(newFieldErrors).some(Boolean);
+    if (hasFieldErrors) {
+      setFieldErrors(newFieldErrors);
+      return;
     }
 
     try {
-      setError("");
       setLoading(true);
-      await signup(email, password);
-      toast.success("Account created successfully! Welcome!");
+      await signup(email, password, fullName);
+      toast.success("Account created successfully! Welcome!", {
+        position: 'top-right',
+        duration: 4000
+      });
       navigate("/");
     } catch (err) {
-      console.error("Signup error details:", {
-        code: err.code,
-        message: err.message,
-        error: err,
-      });
-      
-      let errorMessage = "Failed to create an account";
-      
+      console.error("Signup error details:", err);
       if (err.code === "auth/email-already-in-use") {
-        errorMessage = "This email is already registered. Please use a different email or log in.";
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "This email is already in use. Please use another email.",
+        }));
       } else if (err.code === "auth/invalid-email") {
-        errorMessage = "Invalid email address. Please enter a valid email.";
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "Please enter a valid email address.",
+        }));
       } else if (err.code === "auth/weak-password") {
-        errorMessage = "Password is too weak. Please use a stronger password (at least 6 characters).";
-      } else if (err.code === "auth/operation-not-allowed") {
-        errorMessage = "Email/Password authentication is not enabled. Please enable it in Firebase Console under Authentication > Sign-in method.";
-      } else if (err.code === "auth/configuration-not-found") {
-        errorMessage = "Firebase Authentication is not configured. Please enable it in Firebase Console.";
-      } else if (err.code === "auth/invalid-api-key") {
-        errorMessage = "Invalid API key. Please check your .env file and Firebase project settings.";
-      } else if (err.code === "auth/network-request-failed") {
-        errorMessage = "Network error. Please check your internet connection.";
-      } else if (err.message) {
-        errorMessage = `${err.message}${err.code ? ` (Code: ${err.code})` : ""}`;
+        setFieldErrors((prev) => ({
+          ...prev,
+          password: "Password is too weak. Use at least 6 characters.",
+        }));
       } else {
-        errorMessage = `Error: ${err.code || "Unknown error"}. Please check the browser console for details.`;
+        setFormError(err.message || "Failed to create an account");
       }
-      
-      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center px-4">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-xl p-8 space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900 text-center">Sign Up</h1>
+    <div className="main-wrapper">
+      <div className="page-wrapper full-page">
+        <div className="page-content container-xxl d-flex align-items-center justify-content-center">
+          <div className="row w-100 mx-0 auth-page">
+            <div className="col-md-10 col-lg-8 col-xl-6 mx-auto">
+              <div className="card shadow-sm border-0 overflow-hidden">
+                <div className="row">
+                  <div className="col-md-12 ps-md-0">
+                    <div className="auth-form-wrapper px-4 py-5">
+                      <div className="nobleui-logo d-block mb-2 text-center">Cs<span>Formly</span></div>
+                      <h5 className="text-secondary fw-normal mb-4 text-center">Create a free account.</h5>
+                      
+                      {formError && (
+                        <div className="alert alert-danger py-2 d-flex align-items-center" role="alert">
+                          <LucideIcon name="alert-circle" className="icon-sm me-2" />
+                          <span className="fs-13px">{formError}</span>
+                        </div>
+                      )}
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
+                      <form className="forms-sample" onSubmit={handleSubmit} noValidate>
+                        <div className="mb-3">
+                          <label className="form-label">Full Name</label>
+                          <input 
+                            type="text" 
+                            className={`form-control ${fieldErrors.fullName ? "is-invalid" : ""}`}
+                            placeholder="Full Name"
+                            value={fullName}
+                            onChange={(e) => {
+                              setFullName(e.target.value);
+                              setFieldErrors((prev) => ({ ...prev, fullName: "" }));
+                            }}
+                          />
+                          {fieldErrors.fullName && <div className="invalid-feedback d-block">{fieldErrors.fullName}</div>}
+                        </div>
+                        <div className="mb-3">
+                          <label className="form-label">Email address</label>
+                          <input 
+                            type="email" 
+                            className={`form-control ${fieldErrors.email ? "is-invalid" : ""}`}
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => {
+                              setEmail(e.target.value);
+                              setFieldErrors((prev) => ({ ...prev, email: "" }));
+                            }}
+                          />
+                          {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
+                        </div>
+                        <div className="mb-3">
+                          <label className="form-label">Password</label>
+                          <div className="input-group">
+                            <input 
+                              type={showPassword ? "text" : "password"} 
+                              className={`form-control ${fieldErrors.password ? "is-invalid" : ""}`}
+                              autoComplete="new-password" 
+                              placeholder="Password"
+                              value={password}
+                              onChange={(e) => {
+                                setPassword(e.target.value);
+                                setFieldErrors((prev) => ({ ...prev, password: "" }));
+                              }}
+                              style={{ borderRight: 'none' }}
+                            />
+                            <button 
+                              className="btn btn-outline-secondary px-3" 
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              style={{ 
+                                borderLeft: 'none',
+                                backgroundColor: 'transparent',
+                                borderTopRightRadius: '4px',
+                                borderBottomRightRadius: '4px',
+                                borderColor: 'var(--bs-border-color)'
+                              }}
+                            >
+                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                            </button>
+                          </div>
+                          {fieldErrors.password && <div className="invalid-feedback d-block">{fieldErrors.password}</div>}
+                        </div>
+                        <div className="mb-3">
+                          <label className="form-label">Confirm Password</label>
+                          <div className="input-group">
+                            <input 
+                              type={showConfirmPassword ? "text" : "password"} 
+                              className={`form-control ${fieldErrors.confirmPassword ? "is-invalid" : ""}`}
+                              autoComplete="new-password" 
+                              placeholder="Confirm Password"
+                              value={confirmPassword}
+                              onChange={(e) => {
+                                setConfirmPassword(e.target.value);
+                                setFieldErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                              }}
+                              style={{ borderRight: 'none' }}
+                            />
+                            <button 
+                              className="btn btn-outline-secondary px-3" 
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              style={{ 
+                                borderLeft: 'none',
+                                backgroundColor: 'transparent',
+                                borderTopRightRadius: '4px',
+                                borderBottomRightRadius: '4px',
+                                borderColor: 'var(--bs-border-color)'
+                              }}
+                            >
+                              <LucideIcon name={showConfirmPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                            </button>
+                          </div>
+                          {fieldErrors.confirmPassword && (
+                            <div className="invalid-feedback d-block">{fieldErrors.confirmPassword}</div>
+                          )}
+                        </div>
+                        <div className="form-check mb-3">
+                          <input
+                            type="checkbox"
+                            className={`form-check-input ${fieldErrors.terms ? "is-invalid" : ""}`}
+                            id="authCheck"
+                            checked={agreeToTerms}
+                            onChange={(e) => {
+                              setAgreeToTerms(e.target.checked);
+                              setFieldErrors((prev) => ({ ...prev, terms: "" }));
+                            }}
+                          />
+                          <label className="form-check-label ms-1" htmlFor="authCheck">
+                            I agree to the terms and conditions
+                          </label>
+                          {fieldErrors.terms && <div className="invalid-feedback d-block">{fieldErrors.terms}</div>}
+                        </div>
+                        <div className="text-center pt-2">
+                          <button 
+                            type="submit" 
+                            className="btn btn-primary d-block w-100 text-white py-2 mb-3 shadow-sm fw-bold"
+                            disabled={loading}
+                          >
+                            {loading ? "Creating account..." : "Sign Up"}
+                          </button>
+                        </div>
+                        <p className="mt-3 text-secondary text-center fs-14px">
+                          Already have an account? <Link to="/login" className="text-primary fw-bold text-decoration-none ms-1">Log in</Link>
+                        </p>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-              placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your email"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-              placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              required
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-              placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Confirm your password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-6 py-3 rounded-2xl bg-blue-600 text-white text-sm font-semibold 
-            hover:bg-blue-700 disabled:bg-blue-300 transition"
-          >
-            {loading ? "Creating account..." : "Sign Up"}
-          </button>
-        </form>
-
-        <div className="text-center text-sm text-gray-600">
-          Already have an account?{" "}
-          <Link to="/login" className="text-blue-600 hover:text-blue-700 font-semibold">
-            Log In
-          </Link>
         </div>
       </div>
     </div>

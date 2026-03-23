@@ -3,12 +3,12 @@ import { useToast } from '../context/ToastContext';
 
 // Custom hook that combines auth and toast functionality
 export const useAuthWithToast = () => {
-  const { signup, login, logout, resetPassword, currentUser } = useAuth();
+  const { signup, login, logout, resetPassword, currentUser, updateUserMeta } = useAuth();
   const { addToast } = useToast();
 
-  const signupWithToast = async (email, password) => {
+  const signupWithToast = async (email, password, name) => {
     try {
-      const result = await signup(email, password);
+      const result = await signup(email, password, name);
       addToast('Account created successfully!', 'success');
       return result;
     } catch (error) {
@@ -36,13 +36,15 @@ export const useAuthWithToast = () => {
       return result;
     } catch (error) {
       let errorMessage = 'Failed to log in';
-      
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email. Please sign up first.';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = 'Incorrect password. Please try again.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address. Please enter a valid email.';
+
+      if (
+        error.code === 'auth/user-not-found' ||
+        error.code === 'auth/wrong-password' ||
+        error.code === 'auth/invalid-login-credentials' ||
+        error.code === 'auth/invalid-credential' ||
+        error.code === 'auth/invalid-email'
+      ) {
+        errorMessage = 'Invalid email or password. Please check your credentials.';
       } else if (error.code === 'auth/operation-not-allowed') {
         errorMessage = 'Email/Password authentication is not enabled.';
       } else if (error.message) {
@@ -88,11 +90,22 @@ export const useAuthWithToast = () => {
     }
   };
 
+  const updateUserMetaWithToast = async (data) => {
+    try {
+      await updateUserMeta(data);
+      addToast('Profile updated successfully!', 'success');
+    } catch (error) {
+      addToast('Failed to update profile', 'error');
+      throw error;
+    }
+  };
+
   return {
     signup: signupWithToast,
     login: loginWithToast,
     logout: logoutWithToast,
     resetPassword: resetPasswordWithToast,
+    updateUserMeta: updateUserMetaWithToast,
     currentUser
   };
 };

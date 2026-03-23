@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login, resetPassword } = useAuthWithToast();
   const { currentUser } = useAuth();
@@ -18,6 +18,7 @@ export default function Login() {
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
   // Spam protection
   const [lastResetAttempt, setLastResetAttempt] = useState(0);
   const [resetAttempts, setResetAttempts] = useState(0);
@@ -33,7 +34,7 @@ export default function Login() {
     } else if (loginSuccess && !currentUser) {
       setTimeout(() => {
         if (!currentUser) {
-          setError("Login failed. Please check your credentials.");
+          setFormError("Login failed. Please check your credentials.");
           setLoading(false);
           setLoginSuccess(false);
         }
@@ -43,51 +44,56 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-
-    setError("");
+    setFieldErrors({ email: "", password: "" });
+    setFormError("");
     setLoading(true);
 
+    const nextErrors = { email: "", password: "" };
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address.");
-      setLoading(false);
-      return;
+    if (!email.trim()) {
+      nextErrors.email = "Email is required.";
+    } else if (!emailRegex.test(email.trim())) {
+      nextErrors.email = "Please enter a valid email address.";
     }
 
     if (!password || password.trim().length === 0) {
-      setError("Password is required.");
+      nextErrors.password = "Password is required.";
+    }
+
+    if (nextErrors.email || nextErrors.password) {
+      setFieldErrors(nextErrors);
       setLoading(false);
       return;
     }
 
     try {
       await login(email, password);
-      
+      toast.success("Welcome back!", { position: 'top-right' });
       setLoginSuccess(true);
     } catch (err) {
-      // Login failed - do NOT navigate to dashboard
       setLoginSuccess(false);
       setLoading(false);
-      let errorMessage = "Failed to log in";
-      
-      if (err.code === "auth/user-not-found") {
-        errorMessage = "No account found with this email. Please sign up first.";
-      } else if (err.code === "auth/wrong-password") {
-        errorMessage = "Incorrect password. Please try again.";
-      } else if (err.code === "auth/invalid-email") {
-        errorMessage = "Invalid email address. Please enter a valid email.";
-      } else if (err.code === "auth/invalid-credential") {
-        errorMessage = "Invalid email or password. Please check your credentials.";
-      } else if (err.code === "auth/operation-not-allowed") {
-        errorMessage = "Email/Password authentication is not enabled. Please enable it in Firebase Console.";
-      } else if (err.code === "auth/configuration-not-found") {
-        errorMessage = "Firebase Authentication is not configured. Please enable it in Firebase Console.";
-      } else if (err.message) {
-        errorMessage = err.message;
+      const code = err.code || "";
+
+      // For auth failures, show only common toast (handled in useAuthWithToast)
+      if (
+        code === "auth/user-not-found" ||
+        code === "auth/invalid-email" ||
+        code === "auth/wrong-password" ||
+        code === "auth/invalid-credential" ||
+        code === "auth/invalid-login-credentials"
+      ) {
+        setFieldErrors({ email: "", password: "" });
+        setFormError("");
+        return;
       }
-      
-      setError(errorMessage);
-      // Stay on login page - do NOT navigate
+
+      if (code === "auth/too-many-requests") {
+        setFormError("Too many attempts. Please try again later.");
+        return;
+      }
+
+      setFormError(err.message || "Failed to log in");
     }
   }
 
@@ -160,272 +166,205 @@ export default function Login() {
       setResetLoading(false);
     }
   }
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Helper component to render Lucide icons safely
+  const LucideIcon = ({ name, className = "", style = {} }) => {
+    useEffect(() => {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }, [name]);
+    
+    return (
+      <span 
+        className={`d-inline-flex align-items-center justify-content-center ${className}`}
+        style={style}
+        dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}"></i>` }}
+      />
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-[#f4f5f7] flex items-center justify-center px-4">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-xl p-8 space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900 text-center">Log in</h1>
+    <div className="main-wrapper">
+      <div className="page-wrapper full-page">
+        <div className="page-content container-xxl d-flex align-items-center justify-content-center">
+          <div className="row w-100 mx-0 auth-page">
+            <div className="col-md-10 col-lg-8 col-xl-6 mx-auto">
+              <div className="card shadow-sm border-0 overflow-hidden">
+                <div className="row">
+                  <div className="col-md-12 ps-md-0">
+                    <div className="auth-form-wrapper px-4 py-5">
+                      <div className="nobleui-logo d-block mb-2 text-center">Cs<span>Formly</span></div>
+                      <h5 className="text-secondary fw-normal mb-4 text-center">Welcome back! Log in to your account.</h5>
+                      
+                      {formError && (
+                        <div className="alert alert-danger py-2 d-flex align-items-center" role="alert">
+                          <LucideIcon name="alert-circle" className="icon-sm me-2" />
+                          <span className="fs-13px">{formError}</span>
+                        </div>
+                      )}
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-              placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your email"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-             
+                      <form className="forms-sample" onSubmit={handleSubmit} noValidate>
+                        <div className="mb-3">
+                          <label className="form-label">Email address</label>
+                          <input 
+                            type="email" 
+                            className={`form-control ${fieldErrors.email ? "is-invalid" : ""}`}
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => {
+                              setEmail(e.target.value);
+                              setFieldErrors((prev) => ({ ...prev, email: "" }));
+                            }}
+                          />
+                          {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
+                        </div>
+                        <div className="mb-3">
+                          <label className="form-label">Password</label>
+                          <div className={`input-group ${fieldErrors.password ? "is-invalid" : ""}`}>
+                            <input 
+                              type={showPassword ? "text" : "password"} 
+                              className={`form-control ${fieldErrors.password ? "is-invalid" : ""}`}
+                              autoComplete="current-password" 
+                              placeholder="Password"
+                              value={password}
+                              onChange={(e) => {
+                                setPassword(e.target.value);
+                                setFieldErrors((prev) => ({ ...prev, password: "" }));
+                              }}
+                              style={{
+                                borderRight: "none",
+                                backgroundImage: fieldErrors.password ? "none" : undefined,
+                                paddingRight: fieldErrors.password ? "0.75rem" : undefined,
+                              }}
+                            />
+                            <button 
+                              className={`btn btn-outline-secondary px-3 ${fieldErrors.password ? "border-danger text-danger" : ""}`} 
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              style={{ 
+                                borderLeft: 'none',
+                                backgroundColor: 'transparent',
+                                borderTopRightRadius: '4px',
+                                borderBottomRightRadius: '4px',
+                                borderColor: 'var(--bs-border-color)'
+                              }}
+                            >
+                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                            </button>
+                          </div>
+                          {fieldErrors.password && <div className="invalid-feedback d-block">{fieldErrors.password}</div>}
+                        </div>
+                        <div className="mb-3 d-flex justify-content-between align-items-center">
+                          <div className="form-check">
+                            <input type="checkbox" className="form-check-input" id="authCheck" />
+                            <label className="form-check-label ms-1" htmlFor="authCheck">
+                              Remember me
+                            </label>
+                          </div>
+                          <button 
+                            type="button" 
+                            className="btn btn-link p-0 text-decoration-none fs-13px"
+                            onClick={() => {
+                              setShowForgotPassword(true);
+                              setResetEmail(email);
+                            }}
+                          >
+                            Forgot password?
+                          </button>
+                        </div>
+                        <div className="text-center pt-2">
+                          <button 
+                            type="submit" 
+                            className="btn btn-primary d-block w-100 text-white py-2 mb-3 shadow-sm fw-bold"
+                            disabled={loading}
+                          >
+                            {loading ? "Logging in..." : "Login"}
+                          </button>
+                        </div>
+                        <p className="mt-3 text-secondary text-center fs-14px">
+                          Don't have an account? <Link to="/signup" className="text-primary fw-bold text-decoration-none ms-1">Sign up</Link>
+                        </p>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 
-              placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your password"
-            />
           </div>
-           <button
-                type="button"
-                onClick={() => {
-                  setShowForgotPassword(true);
-                  setResetEmail(email); // Pre-fill with login email if available
-                }}
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Forgot Password?
-              </button>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-6 py-3 rounded-2xl bg-blue-600 text-white text-sm font-semibold 
-            hover:bg-blue-700 disabled:bg-blue-300 transition"
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
-
-        <div className="text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-semibold">
-            Sign Up
-          </Link>
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password Modal (Restructured for Bootstrap) */}
       {showForgotPassword && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 space-y-6 relative transform transition-all duration-300 scale-100">
-            {/* Close Button */}
-            <button
-              onClick={() => {
-                setShowForgotPassword(false);
-                setResetEmail("");
-                setResetError("");
-                setResetSuccess(false);
-                setResetAttempts(0);
-              }}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
-              aria-label="Close"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-
-            {/* Header */}
-            <div className="text-center space-y-2">
-              <div className="mx-auto bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-8 w-8 text-blue-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg">
+              <div className="modal-header border-0 pb-0">
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  aria-label="Close" 
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetEmail("");
+                    setResetError("");
+                    setResetSuccess(false);
+                    setResetAttempts(0);
+                  }}
+                ></button>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">Reset Password</h2>
-              <p className="text-gray-600 text-base">
-                Enter your email and we'll send you a link to reset your password
-              </p>
-            </div>
+              <div className="modal-body p-4 text-center">
+                <div className="mb-4 d-inline-block p-3 bg-primary-subtle rounded-circle">
+                  <i className="text-primary fs-1" data-lucide="unlock"></i>
+                </div>
+                <h4 className="fw-bold mb-2">Reset Password</h4>
+                <p className="text-secondary mb-4">Enter your email and we'll send you a link to reset your password</p>
 
-            {/* Success Message */}
-            {resetSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 animate-slideDown">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 text-green-500"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clipRule="evenodd"
+                {resetSuccess && (
+                  <div className="alert alert-success text-start" role="alert">
+                    <h6 className="alert-heading fw-bold">Email Sent!</h6>
+                    Check your inbox for password reset instructions.
+                  </div>
+                )}
+
+                {!resetSuccess && (
+                  <form onSubmit={handleForgotPassword}>
+                    <div className="mb-3 text-start">
+                      <label className="form-label fw-semibold">Email Address</label>
+                      <input 
+                        type="email" 
+                        required
+                        className={`form-control ${resetError ? 'is-invalid' : ''}`}
+                        placeholder="you@example.com"
+                        value={resetEmail}
+                        onChange={(e) => {
+                          setResetEmail(e.target.value);
+                          setResetError("");
+                        }}
                       />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-green-800 font-medium">Email Sent!</h3>
-                    <p className="text-green-700 text-sm mt-1">
-                      Check your inbox for password reset instructions. The link will expire in 1 hour.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Form */}
-            {!resetSuccess && (
-              <form onSubmit={handleForgotPassword} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      required
-                      value={resetEmail}
-                      onChange={(e) => {
-                        setResetEmail(e.target.value);
-                        setResetError("");
-                      }}
-                      className={`w-full rounded-xl border px-4 py-3 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${resetError ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
-                      placeholder="you@example.com"
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                        />
-                      </svg>
+                      {resetError && <div className="invalid-feedback">{resetError}</div>}
                     </div>
-                  </div>
-                  {resetError && (
-                    <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      {resetError}
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={resetLoading || (resetAttempts >= RESET_ATTEMPT_LIMIT && Date.now() - lastResetAttempt < RESET_COOLDOWN_TIME)}
-                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold 
-                  hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary w-100 py-2 mb-3 shadow-sm"
+                      disabled={resetLoading || (resetAttempts >= RESET_ATTEMPT_LIMIT && Date.now() - lastResetAttempt < RESET_COOLDOWN_TIME)}
+                    >
+                      {resetLoading ? "Sending Reset Link..." : "Send Reset Link"}
+                    </button>
+                  </form>
+                )}
+                
+                <button 
+                  type="button" 
+                  className="btn btn-link text-secondary text-decoration-none"
+                  onClick={() => setShowForgotPassword(false)}
                 >
-                  {resetLoading ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Sending Reset Link...
-                    </div>
-                  ) : resetAttempts >= RESET_ATTEMPT_LIMIT && Date.now() - lastResetAttempt < RESET_COOLDOWN_TIME ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      Please Wait...
-                    </div>
-                  ) : (
-                    "Send Reset Link"
-                  )}
+                  ← Back to Login
                 </button>
-              </form>
-            )}
-
-            {/* Footer */}
-            <div className="pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setResetEmail("");
-                  setResetError("");
-                  setResetSuccess(false);
-                  setResetAttempts(0);
-                }}
-                className="w-full py-2.5 text-center text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors rounded-lg hover:bg-gray-50"
-              >
-                ← Back to Login
-              </button>
+              </div>
             </div>
           </div>
         </div>

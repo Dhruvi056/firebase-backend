@@ -5,7 +5,12 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import AddFormPopup from "./AddFormPopup.jsx";
 
-export default function Sidebar({ onSelectForm, selectedForm }) {
+export default function Sidebar({
+  onSelectForm,
+  selectedForm,
+  onClearAllNotifications,
+  clearNotificationsToken,
+}) {
   const [showPopup, setShowPopup] = useState(false);
   const [forms, setForms] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -120,28 +125,37 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
       const submissionsRef = collection(db, `forms/${form.formId}/submissions`);
       const submissionsQuery = query(submissionsRef, orderBy("submittedAt", "desc"));
 
-      submissionUnsubsRef.current[form.formId] = onSnapshot(submissionsQuery, (snap) => {
-        // Ignore initial snapshot to avoid counting historical rows as "new"
-        if (!initializedSubmissionListenersRef.current[form.formId]) {
-          initializedSubmissionListenersRef.current[form.formId] = true;
-          return;
+      submissionUnsubsRef.current[form.formId] = onSnapshot(
+        submissionsQuery,
+        (snap) => {
+          // Ignore initial snapshot to avoid counting historical rows as "new"
+          if (!initializedSubmissionListenersRef.current[form.formId]) {
+            initializedSubmissionListenersRef.current[form.formId] = true;
+            return;
+          }
+
+          const addedCount = snap.docChanges().filter((change) => change.type === "added").length;
+
+          if (addedCount <= 0) return;
+          if (selectedForm?.formId === form.formId) return;
+
+          setNewSubmissionCounts((prev) => ({
+            ...prev,
+            [form.formId]: (prev[form.formId] || 0) + addedCount,
+          }));
+
+          addToast(
+            `${addedCount} new submission${addedCount > 1 ? "s" : ""} in ${form.name}`,
+            "info"
+          );
+        },
+        (err) => {
+          console.warn(
+            `Sidebar submission listener blocked for form ${form.formId}:`,
+            err?.code || err
+          );
         }
-
-        const addedCount = snap.docChanges().filter((change) => change.type === "added").length;
-
-        if (addedCount <= 0) return;
-        if (selectedForm?.formId === form.formId) return;
-
-        setNewSubmissionCounts((prev) => ({
-          ...prev,
-          [form.formId]: (prev[form.formId] || 0) + addedCount,
-        }));
-
-        addToast(
-          `${addedCount} new submission${addedCount > 1 ? "s" : ""} in ${form.name}`,
-          "info"
-        );
-      });
+      );
     });
   }, [forms, selectedForm?.formId, addToast]);
 
@@ -157,6 +171,11 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
       return next;
     });
   }, [selectedForm?.formId]);
+
+  // Clear all sidebar notification counters when navbar triggers global clear
+  useEffect(() => {
+    setNewSubmissionCounts({});
+  }, [clearNotificationsToken]);
 
   // Cleanup listeners on unmount
   useEffect(() => {
@@ -234,7 +253,19 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
                     >
                       <span className="link-title text-truncate">{f.name}</span>
                       {unreadCount > 0 && (
-                        <span className="badge rounded-pill bg-primary ms-2">{unreadCount}</span>
+                        <span
+                          className="badge rounded-pill bg-primary ms-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewSubmissionCounts({});
+                            onClearAllNotifications?.();
+                          }}
+                          title="Clear all notifications"
+                          role="button"
+                          style={{ cursor: "pointer" }}
+                        >
+                          {unreadCount}
+                        </span>
                       )}
                     </button>
                   </li>
@@ -268,7 +299,19 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
                         <LucideIcon name={isFolderExpanded ? "folder-open" : "folder"} className="link-icon" />
                         <span className="link-title text-truncate">{folder.name}</span>
                         {folderUnreadCount > 0 && (
-                          <span className="badge rounded-pill bg-primary ms-2">{folderUnreadCount}</span>
+                          <span
+                            className="badge rounded-pill bg-primary ms-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewSubmissionCounts({});
+                              onClearAllNotifications?.();
+                            }}
+                            title="Clear all notifications"
+                            role="button"
+                            style={{ cursor: "pointer" }}
+                          >
+                            {folderUnreadCount}
+                          </span>
                         )}
                       </div>
                       <div 
@@ -303,7 +346,19 @@ export default function Sidebar({ onSelectForm, selectedForm }) {
                                 >
                                   <span className="text-truncate">{f.name}</span>
                                   {unreadCount > 0 && (
-                                    <span className="badge rounded-pill bg-primary ms-2">{unreadCount}</span>
+                                    <span
+                                      className="badge rounded-pill bg-primary ms-2"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setNewSubmissionCounts({});
+                                        onClearAllNotifications?.();
+                                      }}
+                                      title="Clear all notifications"
+                                      role="button"
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      {unreadCount}
+                                    </span>
                                   )}
                                 </button>
                               </li>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getDoc, doc, collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { getDoc, doc, collection, onSnapshot, query, where, orderBy, limit, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import FormDetails from "../components/FormDetails.jsx";
@@ -18,13 +18,70 @@ export default function Home() {
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [useSubmissionFallbackNotifications, setUseSubmissionFallbackNotifications] = useState(false);
+  const [clearNotificationsToken, setClearNotificationsToken] = useState(0);
+  const [clearBeforeMs, setClearBeforeMs] = useState(0);
   const { currentUser, userMeta, logout, updateUserMeta } = useAuth();
+  const hasInitializedNotificationsRef = useRef(false);
   const notificationFormUnsubsRef = useRef({});
   const initializedNotificationListenersRef = useRef({});
+  const clearBeforeMsRef = useRef(0);
 
-  // Live notifications from new submissions across all accessible forms
+  const getNotificationTimeMs = (value) => {
+    if (value?.toDate) return value.toDate().getTime();
+    const parsed = new Date(value || 0).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Live notifications scoped to logged-in user
   useEffect(() => {
     if (!currentUser) return;
+    hasInitializedNotificationsRef.current = false;
+    setUseSubmissionFallbackNotifications(false);
+
+    const notificationsRef = collection(db, "notifications");
+    const notificationsQ = query(notificationsRef, where("userId", "==", currentUser.uid));
+
+    const notificationsUnsub = onSnapshot(
+      notificationsQ,
+      (snap) => {
+        const list = snap.docs.map((n) => {
+          const data = n.data() || {};
+          return {
+            id: n.id,
+            formId: data.formId || "",
+            formName: data.formName || data.formId || "Form",
+            dataSnippet: data.dataSnippet || "New submission",
+            createdAt: data.createdAt || new Date(),
+            read: !!data.read,
+          };
+        }).filter((n) => getNotificationTimeMs(n.createdAt) > clearBeforeMsRef.current).sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB - dateA;
+        }).slice(0, 20);
+
+        setNotifications(list);
+        setUnreadCount(list.filter((n) => !n.read).length);
+
+        if (!hasInitializedNotificationsRef.current) {
+          hasInitializedNotificationsRef.current = true;
+        }
+      },
+      (err) => {
+        console.error("Notifications listener error:", err);
+        if (err?.code === "permission-denied") {
+          setUseSubmissionFallbackNotifications(true);
+        }
+      }
+    );
+
+    return () => notificationsUnsub();
+  }, [currentUser?.uid, clearBeforeMs]);
+
+  // Fallback notifications from submissions when notifications collection is not readable by rules
+  useEffect(() => {
+    if (!currentUser || !useSubmissionFallbackNotifications) return;
 
     let formsQ = collection(db, "forms");
     if (userMeta?.role === "vendor_admin" && userMeta.vendorId) {
@@ -44,7 +101,6 @@ export default function Home() {
           formNameById[formDoc.id] = formDoc.data()?.name || formDoc.id;
         });
 
-        // Remove stale listeners
         Object.keys(notificationFormUnsubsRef.current).forEach((trackedFormId) => {
           if (!formIds.has(trackedFormId)) {
             notificationFormUnsubsRef.current[trackedFormId]();
@@ -53,18 +109,46 @@ export default function Home() {
           }
         });
 
-        // Add listeners for each form submissions
         formIds.forEach((trackedFormId) => {
           if (notificationFormUnsubsRef.current[trackedFormId]) return;
 
           const submissionsRef = collection(db, `forms/${trackedFormId}/submissions`);
-          const submissionsQuery = query(submissionsRef, orderBy("submittedAt", "desc"));
+          const submissionsQuery = query(submissionsRef, orderBy("submittedAt", "desc"), limit(20));
 
           notificationFormUnsubsRef.current[trackedFormId] = onSnapshot(
             submissionsQuery,
             (submissionsSnap) => {
               if (!initializedNotificationListenersRef.current[trackedFormId]) {
                 initializedNotificationListenersRef.current[trackedFormId] = true;
+                const initial = submissionsSnap.docs.map((d) => {
+                  const submission = d.data() || {};
+                  const payload = submission.data || {};
+                  const snippet =
+                    payload.email ||
+                    payload.name ||
+                    Object.values(payload)[0] ||
+                    "New submission";
+
+                  return {
+                    id: `fallback-initial-${trackedFormId}-${d.id}`,
+                    formId: trackedFormId,
+                    formName: formNameById[trackedFormId] || trackedFormId,
+                    dataSnippet: String(snippet),
+                    createdAt: submission.submittedAt || new Date(),
+                    read: true,
+                  };
+                });
+
+                setNotifications((prev) =>
+                  [...initial, ...prev]
+                    .filter((n) => getNotificationTimeMs(n.createdAt) > clearBeforeMsRef.current)
+                    .sort((a, b) => {
+                      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+                      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+                      return dateB - dateA;
+                    })
+                    .slice(0, 20)
+                );
                 return;
               }
 
@@ -81,27 +165,35 @@ export default function Home() {
                   "New submission";
 
                 return {
-                  id: `local-${trackedFormId}-${change.doc.id}-${Date.now()}-${Math.random()}`,
+                  id: `fallback-${trackedFormId}-${change.doc.id}-${Date.now()}-${Math.random()}`,
                   formId: trackedFormId,
                   formName: formNameById[trackedFormId] || trackedFormId,
                   dataSnippet: String(snippet),
                   createdAt: submission.submittedAt || new Date(),
                   read: false,
-                  isLocal: true,
                 };
               });
 
-              setNotifications((prev) => [...fresh, ...prev].slice(0, 20));
+              setNotifications((prev) =>
+                [...fresh, ...prev]
+                  .filter((n) => getNotificationTimeMs(n.createdAt) > clearBeforeMsRef.current)
+                  .sort((a, b) => {
+                    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+                    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+                    return dateB - dateA;
+                  })
+                  .slice(0, 20)
+              );
               setUnreadCount((prev) => prev + fresh.length);
             },
             (err) => {
-              console.error(`Submission listener error for form ${trackedFormId}:`, err);
+              console.warn(`Fallback submission listener blocked for form ${trackedFormId}:`, err?.code || err);
             }
           );
         });
       },
       (err) => {
-        console.error("Forms listener error for notifications:", err);
+        console.error("Fallback forms listener error for notifications:", err);
       }
     );
 
@@ -111,11 +203,60 @@ export default function Home() {
       notificationFormUnsubsRef.current = {};
       initializedNotificationListenersRef.current = {};
     };
-  }, [currentUser, userMeta]);
+  }, [currentUser?.uid, userMeta, useSubmissionFallbackNotifications]);
 
-  const markAllAsRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const clearAllNotifications = async () => {
+    const now = Date.now();
+    clearBeforeMsRef.current = now;
+    setClearBeforeMs(now);
+
+    const current = [...notifications];
+    const firestoreBacked = current.filter((n) => !String(n.id).startsWith("fallback-"));
+
+    try {
+      await Promise.all(
+        firestoreBacked.map((n) => deleteDoc(doc(db, "notifications", n.id)).catch(() => null))
+      );
+    } catch (err) {
+      console.error("Failed clearing all notifications:", err);
+    }
+
+    setNotifications([]);
     setUnreadCount(0);
+    setShowNotificationMenu(false);
+    setClearNotificationsToken((prev) => prev + 1);
+  };
+
+  const handleNotificationClick = async (notif) => {
+    try {
+      if (notif.formId) {
+        const formRef = doc(db, "forms", notif.formId);
+        const formSnap = await getDoc(formRef);
+        const formData = formSnap.exists() ? formSnap.data() : null;
+
+        // Open inside same dashboard view only (no new tab)
+        navigate(`/forms/${notif.formId}`, { replace: true });
+      }
+
+      // Requirement: clicking one notification clears all notifications
+      await clearAllNotifications();
+    } catch (err) {
+      console.error("Failed to open/remove notification:", err);
+    }
+  };
+
+  const handleNotificationBellClick = async () => {
+    if (showNotificationMenu) {
+      // If menu is already open and user closes it, clear all notifications.
+      await clearAllNotifications();
+      return;
+    }
+    setShowNotificationMenu(true);
+  };
+
+  const handleNotificationMenuBackdropClick = async () => {
+    // Requirement: when user exits/clicks outside notification popup, clear all.
+    await clearAllNotifications();
   };
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
@@ -210,7 +351,12 @@ export default function Home() {
 
   return (
     <div className="main-wrapper">
-      <Sidebar onSelectForm={handleSelectForm} selectedForm={selectedForm} />
+      <Sidebar
+        onSelectForm={handleSelectForm}
+        selectedForm={selectedForm}
+        onClearAllNotifications={clearAllNotifications}
+        clearNotificationsToken={clearNotificationsToken}
+      />
       <div className="page-wrapper">
         <nav className="navbar" style={{ zIndex: 1000 }}>
           <div className="navbar-content">
@@ -262,27 +408,36 @@ export default function Home() {
                 <button 
                   className="nav-link position-relative p-0 d-flex align-items-center border-0 bg-transparent shadow-none" 
                   title="Notifications" 
-                  onClick={() => {
-                    setShowNotificationMenu(!showNotificationMenu);
-                    if (!showNotificationMenu) markAllAsRead();
-                  }}
+                  onClick={handleNotificationBellClick}
                   type="button"
                 >
                   <LucideIcon name="bell" className="icon-md" />
                   {unreadCount > 0 && (
-                    <span className="position-absolute translate-middle-y translate-middle-x bg-primary border border-2 border-body rounded-circle" style={{ top: '8px', right: '-4px', width: '9px', height: '9px' }}></span>
+                    <span
+                      className="position-absolute badge rounded-pill bg-success text-white"
+                      style={{ top: "-6px", right: "-10px", fontSize: "10px", minWidth: "18px" }}
+                    >
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
                   )}
                 </button>
                 {showNotificationMenu && (
                   <>
-                    <div className="dropdown-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1099 }} onClick={() => setShowNotificationMenu(false)}></div>
+                    <div className="dropdown-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1099 }} onClick={handleNotificationMenuBackdropClick}></div>
                     <div className="dropdown-menu show dropdown-menu-end p-0 shadow-lg border-0 animate-fadeIn" style={{ position: 'absolute', top: '50px', right: '-10px', width: '320px', zIndex: 1100, backgroundColor: 'var(--bs-body-bg)', borderRadius: '12px', border: '1px solid var(--bs-border-color)' }}>
                       <div className="p-3 border-bottom d-flex align-items-center justify-content-between bg-body-tertiary rounded-top">
                         <div className="d-flex align-items-center">
                           <LucideIcon name="bell" className="icon-sm me-2 text-primary" />
                           <h6 className="mb-0 fw-bold">Notifications</h6>
                         </div>
-                        <span className="badge bg-primary text-white rounded-pill small px-2 py-1" style={{ fontSize: '10px' }}>{unreadCount} New</span>
+                        <span className="badge bg-success text-white rounded-pill small px-2 py-1" style={{ fontSize: "10px" }}>
+                          {unreadCount} New
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 border-bottom bg-body-tertiary">
+                        <span className="small text-muted">
+                          Total: <strong>{notifications.length}</strong>
+                        </span>
                       </div>
                       <div className="p-0" style={{ maxHeight: '350px', overflowY: 'auto' }}>
                         {notifications.length === 0 ? (
@@ -292,7 +447,17 @@ export default function Home() {
                           </div>
                         ) : (
                           notifications.map(notif => (
-                            <div key={notif.id} className="p-3 border-bottom d-flex align-items-start hover-bg-light cursor-pointer" style={{ transition: 'background 0.2s' }}>
+                            <button
+                              key={notif.id}
+                              className="w-100 text-start p-3 border-bottom d-flex align-items-start border-0 bg-transparent"
+                              style={{
+                                transition: "background 0.2s",
+                                background: notif.read ? "transparent" : "rgba(25, 135, 84, 0.10)",
+                                borderLeft: notif.read ? "3px solid transparent" : "3px solid #198754",
+                              }}
+                              onClick={() => handleNotificationClick(notif)}
+                              type="button"
+                            >
                               <div className="bg-primary-subtle p-2 rounded-circle me-3">
                                 <LucideIcon name="mail" className="icon-sm text-primary" />
                               </div>
@@ -302,12 +467,18 @@ export default function Home() {
                                 <p className="mb-0 fs-11px text-secondary">{notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}</p>
                                 {!notif.read && <span className="position-absolute end-0 top-50 translate-middle-y me-3 bg-primary rounded-circle" style={{ width: '6px', height: '6px' }}></span>}
                               </div>
-                            </div>
+                            </button>
                           ))
                         )}
                       </div>
                       <div className="p-2 text-center border-top">
-                        <button className="btn btn-link text-primary fs-12px fw-bold p-0 text-decoration-none">View all notifications</button>
+                        <button
+                          className="btn btn-link text-primary fs-12px fw-bold p-0 text-decoration-none"
+                          onClick={clearAllNotifications}
+                          type="button"
+                        >
+                          View all notifications
+                        </button>
                       </div>
                     </div>
                   </>

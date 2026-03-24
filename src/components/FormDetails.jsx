@@ -145,8 +145,11 @@ export default function FormDetails({ form }) {
         setSubmissions(list);
       },
       (error) => {
-        console.error("FormDetails: Error fetching submissions:", error);
-        // Fallback to empty only if it's a serious error, but log it
+        if (error?.code === "permission-denied") {
+          console.warn("FormDetails: submissions access denied by Firestore rules.");
+        } else {
+          console.error("FormDetails: Error fetching submissions:", error);
+        }
         setSubmissions([]);
       }
     );
@@ -228,13 +231,18 @@ export default function FormDetails({ form }) {
                  <p className="text-primary mb-0 me-2 text-truncate d-inline-block" style={{ maxWidth: '300px' }}>{form.url}</p>
                  <button
                   onClick={() => copyToClipboard(form.url)}
-                  className="btn btn-link link-primary p-1 ms-1 text-decoration-none"
+                  className="btn btn-light btn-icon d-inline-flex align-items-center justify-content-center p-1 ms-1"
                   title={copied ? "Copied!" : "Copy URL"}
-                  style={{ borderRadius: '4px' }}
+                  style={{ width: "30px", height: "30px", borderRadius: "6px" }}
                 >
-                  <LucideIcon name={copied ? "check" : "copy"} className="icon-sm" />
-                  {copied ? <span className="ms-1 fs-12px fw-medium">Copied</span> : ""}
+                  <LucideIcon name={copied ? "check" : "copy"} className={`icon-sm ${copied ? "text-success" : "text-primary"}`} />
                 </button>
+                <span
+                  className={`ms-2 badge rounded-pill ${copied ? "bg-success-subtle text-success" : "bg-transparent text-transparent"}`}
+                  style={{ transition: "all 0.2s ease", minWidth: "56px" }}
+                >
+                  Copied
+                </span>
               </div>
             </div>
             <div>

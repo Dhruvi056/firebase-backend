@@ -180,11 +180,37 @@ async function handleFormSubmit(req, res) {
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 2️⃣ Send email if configured
+    // 2️⃣ Create in-app notification(s) for new submission
     const formDoc = await db.collection("forms").doc(formId).get();
 
     if (formDoc.exists) {
       const formData = formDoc.data();
+      const recipientIds = Array.from(
+        new Set([formData.userId, formData.vendorId].filter(Boolean))
+      );
+      const snippet =
+        cleanData.email ||
+        cleanData.name ||
+        Object.values(cleanData)[0] ||
+        "New submission";
+
+      if (recipientIds.length > 0) {
+        await Promise.all(
+          recipientIds.map((uid) =>
+            db.collection("notifications").add({
+              userId: uid,
+              formId,
+              formName: formData.name || formId,
+              dataSnippet: String(snippet).slice(0, 180),
+              read: false,
+              type: "submission",
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      // 3️⃣ Send email if configured
       const notifyEmail = formData.notifyEmail || formData.notificationEmail;
 
       if (notifyEmail) {
@@ -251,7 +277,7 @@ async function handleFormSubmit(req, res) {
       }
     }
 
-    // 3️⃣ Build a friendly success message (used by embed-form.js toast)
+    // 4️⃣ Build a friendly success message (used by embed-form.js toast)
     const { name, fname, lname } = cleanData;
     const fullName = name || [fname, lname].filter(Boolean).join(" ");
     const successPayload = {

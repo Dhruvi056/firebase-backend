@@ -77,7 +77,7 @@ export default function Home() {
     );
 
     return () => notificationsUnsub();
-  }, [currentUser?.uid, clearBeforeMs]);
+  }, [currentUser, clearBeforeMs]);
 
   // Fallback notifications from submissions when notifications collection is not readable by rules
   useEffect(() => {
@@ -203,7 +203,7 @@ export default function Home() {
       notificationFormUnsubsRef.current = {};
       initializedNotificationListenersRef.current = {};
     };
-  }, [currentUser?.uid, userMeta, useSubmissionFallbackNotifications]);
+  }, [currentUser, userMeta, useSubmissionFallbackNotifications]);
 
   const clearAllNotifications = async () => {
     const now = Date.now();
@@ -230,10 +230,6 @@ export default function Home() {
   const handleNotificationClick = async (notif) => {
     try {
       if (notif.formId) {
-        const formRef = doc(db, "forms", notif.formId);
-        const formSnap = await getDoc(formRef);
-        const formData = formSnap.exists() ? formSnap.data() : null;
-
         // Open inside same dashboard view only (no new tab)
         navigate(`/forms/${notif.formId}`, { replace: true });
       }

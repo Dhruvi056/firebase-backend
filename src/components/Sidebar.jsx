@@ -10,6 +10,8 @@ export default function Sidebar({
   selectedForm,
   onClearAllNotifications,
   clearNotificationsToken,
+  onSelectAdminSection,
+  activeAdminSection,
 }) {
   const [showPopup, setShowPopup] = useState(false);
   const [forms, setForms] = useState([]);
@@ -80,6 +82,7 @@ export default function Sidebar({
   }, [currentUser, userMeta]);
 
   const homeActive = !selectedForm;
+  const isSuperAdmin = userMeta?.role === "super_admin";
 
   // Group forms by folder
   const formsByFolder = {};
@@ -214,162 +217,255 @@ export default function Sidebar({
       </div>
       <div className="sidebar-body">
         <ul className="nav" id="sidebarNav">
-          <li className="nav-item nav-category">Forms & Folders</li>
-          
-          <li className="nav-item">
-            <button
-              onClick={() => setShowPopup(true)}
-              className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
-              style={{ color: 'inherit', textDecoration: 'none' }}
-            >
-              <LucideIcon name="plus-circle" className="link-icon" />
-              <span className="link-title">Create...</span>
-            </button>
-          </li>
-
-          <li className={`nav-item ${homeActive ? 'active' : ''}`}>
-            <button
-              onClick={() => onSelectForm(null)}
-              className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
-              style={{ color: homeActive ? 'var(--nobleui-primary)' : 'inherit', textDecoration: 'none' }}
-            >
-              <LucideIcon name="home" className="link-icon" />
-              <span className="link-title">Home</span>
-            </button>
-          </li>
-
-          {formsWithoutFolder.length > 0 && (
+          {isSuperAdmin ? (
             <>
-              <li className="nav-item nav-category">Direct Forms</li>
-              {formsWithoutFolder.map((f) => {
-                const isSelected = selectedForm?.formId === f.formId;
-                const unreadCount = newSubmissionCounts[f.formId] || 0;
-                return (
-                  <li key={f.formId} className={`nav-item ${isSelected ? 'active' : ''}`}>
-                    <button
-                      onClick={() => onSelectForm(f)}
-                      className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center justify-content-between"
-                      style={{ color: isSelected ? 'var(--nobleui-primary)' : '#4d5969', textDecoration: 'none', paddingLeft: '45px' }}
-                    >
-                      <span className="link-title text-truncate">{f.name}</span>
-                      {unreadCount > 0 && (
-                        <span
-                          className="badge rounded-pill bg-primary ms-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNewSubmissionCounts({});
-                            onClearAllNotifications?.();
-                          }}
-                          title="Clear all notifications"
-                          role="button"
-                          style={{ cursor: "pointer" }}
-                        >
-                          {unreadCount}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
+              <li className={`nav-item ${activeAdminSection === "dashboard" ? "active" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => onSelectAdminSection?.("dashboard")}
+                  className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center"
+                  style={{
+                    color: activeAdminSection === "dashboard" ? "var(--nobleui-primary)" : "#4d5969",
+                    textDecoration: "none",
+                  }}
+                >
+                  <LucideIcon name="home" className="link-icon" />
+                  <span className="link-title">Dashboard</span>
+                </button>
+              </li>
+
+              <li className="nav-item">
+                <button
+                  type="button"
+                  onClick={() => setShowPopup(true)}
+                  className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
+                  style={{ color: "inherit", textDecoration: "none" }}
+                >
+                  <LucideIcon name="plus-circle" className="link-icon" />
+                  <span className="link-title">Create...</span>
+                </button>
+              </li>
+
+              <li className={`nav-item ${activeAdminSection === "users" ? "active" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => onSelectAdminSection?.("users")}
+                  className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center"
+                  style={{
+                    color: activeAdminSection === "users" ? "var(--nobleui-primary)" : "#4d5969",
+                    textDecoration: "none",
+                  }}
+                >
+                  <LucideIcon name="users" className="link-icon" />
+                  <span className="link-title">User</span>
+                </button>
+              </li>
+
+              <li className={`nav-item ${activeAdminSection === "forms" ? "active" : ""}`}>
+                <button
+                  type="button"
+                  onClick={() => onSelectAdminSection?.("forms")}
+                  className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center"
+                  style={{
+                    color: activeAdminSection === "forms" ? "var(--nobleui-primary)" : "#4d5969",
+                    textDecoration: "none",
+                  }}
+                >
+                  <LucideIcon name="file-text" className="link-icon" />
+                  <span className="link-title">All forms</span>
+                </button>
+              </li>
             </>
-          )}
-
-          {folders.length > 0 && (
+          ) : (
             <>
-              <li className="nav-item nav-category">Folders</li>
-              {folders.map((folder) => {
-                const folderForms = formsByFolder[folder.id] || [];
-                const isFolderExpanded = expandedFolders[folder.id];
-                const folderUnreadCount = folderForms.reduce(
-                  (total, form) => total + (newSubmissionCounts[form.formId] || 0),
-                  0
-                );
-                
-                return (
-                  <li key={folder.id} className="nav-item">
-                    <button
-                      className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center justify-content-between"
-                      onClick={() => setExpandedFolders(prev => ({
-                        ...prev,
-                        [folder.id]: !isFolderExpanded
-                      }))}
-                      style={{ color: '#4d5969', textDecoration: 'none' }}
-                    >
-                      <div className="d-flex align-items-center overflow-hidden">
-                        <LucideIcon name={isFolderExpanded ? "folder-open" : "folder"} className="link-icon" />
-                        <span className="link-title text-truncate">{folder.name}</span>
-                        {folderUnreadCount > 0 && (
-                          <span
-                            className="badge rounded-pill bg-primary ms-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setNewSubmissionCounts({});
-                              onClearAllNotifications?.();
+              <li className="nav-item nav-category">Forms & Folders</li>
+
+              <li className="nav-item">
+                <button
+                  onClick={() => setShowPopup(true)}
+                  className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
+                  style={{ color: "inherit", textDecoration: "none" }}
+                >
+                  <LucideIcon name="plus-circle" className="link-icon" />
+                  <span className="link-title">Create...</span>
+                </button>
+              </li>
+
+              <li className={`nav-item ${homeActive ? "active" : ""}`}>
+                <button
+                  onClick={() => onSelectForm(null)}
+                  className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center"
+                  style={{
+                    color: homeActive ? "var(--nobleui-primary)" : "inherit",
+                    textDecoration: "none",
+                  }}
+                >
+                  <LucideIcon name="home" className="link-icon" />
+                  <span className="link-title">Home</span>
+                </button>
+              </li>
+
+              {formsWithoutFolder.length > 0 && (
+                <>
+                  <li className="nav-item nav-category">Direct Forms</li>
+                  {formsWithoutFolder.map((f) => {
+                    const isSelected = selectedForm?.formId === f.formId;
+                    const unreadCount = newSubmissionCounts[f.formId] || 0;
+                    return (
+                      <li key={f.formId} className={`nav-item ${isSelected ? "active" : ""}`}>
+                        <button
+                          onClick={() => onSelectForm(f)}
+                          className="nav-link btn btn-link w-100 text-start border-0 py-2 fs-14px d-flex align-items-center justify-content-between"
+                          style={{
+                            color: isSelected ? "var(--nobleui-primary)" : "#4d5969",
+                            textDecoration: "none",
+                            paddingLeft: "45px",
+                          }}
+                        >
+                          <span className="link-title text-truncate">{f.name}</span>
+                          {unreadCount > 0 && (
+                            <span
+                              className="badge rounded-pill bg-primary ms-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNewSubmissionCounts({});
+                                onClearAllNotifications?.();
+                              }}
+                              title="Clear all notifications"
+                              role="button"
+                              style={{ cursor: "pointer" }}
+                            >
+                              {unreadCount}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </>
+              )}
+
+              {folders.length > 0 && (
+                <>
+                  <li className="nav-item nav-category">Folders</li>
+                  {folders.map((folder) => {
+                    const folderForms = formsByFolder[folder.id] || [];
+                    const isFolderExpanded = expandedFolders[folder.id];
+                    const folderUnreadCount = folderForms.reduce(
+                      (total, form) => total + (newSubmissionCounts[form.formId] || 0),
+                      0
+                    );
+
+                    return (
+                      <li key={folder.id} className="nav-item">
+                        <button
+                          className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center justify-content-between"
+                          onClick={() =>
+                            setExpandedFolders((prev) => ({
+                              ...prev,
+                              [folder.id]: !isFolderExpanded,
+                            }))
+                          }
+                          style={{ color: "#4d5969", textDecoration: "none" }}
+                        >
+                          <div className="d-flex align-items-center overflow-hidden">
+                            <LucideIcon
+                              name={isFolderExpanded ? "folder-open" : "folder"}
+                              className="link-icon"
+                            />
+                            <span className="link-title text-truncate">{folder.name}</span>
+                            {folderUnreadCount > 0 && (
+                              <span
+                                className="badge rounded-pill bg-primary ms-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setNewSubmissionCounts({});
+                                  onClearAllNotifications?.();
+                                }}
+                                title="Clear all notifications"
+                                role="button"
+                                style={{ cursor: "pointer" }}
+                              >
+                                {folderUnreadCount}
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className="link-arrow"
+                            style={{
+                              transform: isFolderExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                              transition: "transform 0.2s",
+                              visibility: folderForms.length >= 0 ? "visible" : "hidden",
+                              display: "inline-flex",
+                              opacity: 1,
+                              color: "#4d5969",
+                              pointerEvents: "none",
                             }}
-                            title="Clear all notifications"
-                            role="button"
-                            style={{ cursor: "pointer" }}
                           >
-                            {folderUnreadCount}
-                          </span>
-                        )}
-                      </div>
-                      <div 
-                        className="link-arrow" 
-                        style={{ 
-                          transform: isFolderExpanded ? 'rotate(180deg)' : 'rotate(0deg)', 
-                          transition: 'transform 0.2s',
-                          visibility: folderForms.length >= 0 ? 'visible' : 'hidden',
-                          display: 'inline-flex'
-                        }}
-                      >
-                        <LucideIcon name="chevron-down" />
-                      </div>
-                    </button>
-                    
-                    {isFolderExpanded && (
-                      <ul className="nav sub-menu" style={{ display: 'block', borderLeft: 'none', marginLeft: '25px', padding: '5px 0' }}>
-                        {folderForms.length === 0 ? (
-                          <li className="nav-item">
-                            <span className="nav-link disabled py-1 fs-12px text-muted italic">No forms</span>
-                          </li>
-                        ) : (
-                          folderForms.map((f) => {
-                            const isSelected = selectedForm?.formId === f.formId;
-                            const unreadCount = newSubmissionCounts[f.formId] || 0;
-                            return (
-                              <li key={f.formId} className="nav-item">
-                                <button
-                                  onClick={() => onSelectForm(f)}
-                                  className={`nav-link btn btn-link w-100 text-start border-0 py-1 fs-13px d-flex align-items-center justify-content-between ${isSelected ? 'text-primary fw-bold' : ''}`}
-                                  style={{ color: isSelected ? 'var(--nobleui-primary)' : '#4d5969', textDecoration: 'none' }}
-                                >
-                                  <span className="text-truncate">{f.name}</span>
-                                  {unreadCount > 0 && (
-                                    <span
-                                      className="badge rounded-pill bg-primary ms-2"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setNewSubmissionCounts({});
-                                        onClearAllNotifications?.();
-                                      }}
-                                      title="Clear all notifications"
-                                      role="button"
-                                      style={{ cursor: "pointer" }}
-                                    >
-                                      {unreadCount}
-                                    </span>
-                                  )}
-                                </button>
+                            <LucideIcon name="chevron-down" />
+                          </div>
+                        </button>
+
+                        {isFolderExpanded && (
+                          <ul
+                            className="nav sub-menu"
+                            style={{
+                              display: "block",
+                              borderLeft: "none",
+                              marginLeft: "25px",
+                              padding: "5px 0",
+                            }}
+                          >
+                            {folderForms.length === 0 ? (
+                              <li className="nav-item">
+                                <span className="nav-link disabled py-1 fs-12px text-muted italic">
+                                  No forms
+                                </span>
                               </li>
-                            );
-                          })
+                            ) : (
+                              folderForms.map((f) => {
+                                const isSelected = selectedForm?.formId === f.formId;
+                                const unreadCount = newSubmissionCounts[f.formId] || 0;
+                                return (
+                                  <li key={f.formId} className="nav-item">
+                                    <button
+                                      onClick={() => onSelectForm(f)}
+                                      className={`nav-link btn btn-link w-100 text-start border-0 py-1 fs-13px d-flex align-items-center justify-content-between ${
+                                        isSelected ? "text-primary fw-bold" : ""
+                                      }`}
+                                      style={{
+                                        color: isSelected ? "var(--nobleui-primary)" : "#4d5969",
+                                        textDecoration: "none",
+                                      }}
+                                    >
+                                      <span className="text-truncate">{f.name}</span>
+                                      {unreadCount > 0 && (
+                                        <span
+                                          className="badge rounded-pill bg-primary ms-2"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setNewSubmissionCounts({});
+                                            onClearAllNotifications?.();
+                                          }}
+                                          title="Clear all notifications"
+                                          role="button"
+                                          style={{ cursor: "pointer" }}
+                                        >
+                                          {unreadCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </li>
+                                );
+                              })
+                            )}
+                          </ul>
                         )}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
+                      </li>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
         </ul>

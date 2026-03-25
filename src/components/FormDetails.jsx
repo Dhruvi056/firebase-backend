@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "../firebase";
-import { collection, query, onSnapshot, doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, getDoc, updateDoc, where } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
+import "../styles/components/form-details-toolbar.css";
 
 function isFileField(fieldName, value) {
   if (!value || typeof value !== "string") return false;
@@ -23,7 +26,8 @@ function isFileField(fieldName, value) {
   return looksLikeFileField || looksLikeUrl || looksLikeFileExtension;
 }
 
-export default function FormDetails({ form }) {
+export default function FormDetails({ form, onFormUpdated }) {
+  const { currentUser, userMeta } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [copied, setCopied] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -33,6 +37,13 @@ export default function FormDetails({ form }) {
   const [viewingSubmission, setViewingSubmission] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [folders, setFolders] = useState([]);
+  const [allForms, setAllForms] = useState([]);
+  const [moveFolderId, setMoveFolderId] = useState("");
+  const [moveSaving, setMoveSaving] = useState(false);
 
   const copyToClipboard = async (text) => {
     try {
@@ -44,6 +55,112 @@ export default function FormDetails({ form }) {
     }
   };
 
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let qRef = collection(db, "folders");
+
+    if (userMeta?.role === "vendor_admin" && userMeta.vendorId) {
+      qRef = query(qRef, where("vendorId", "==", userMeta.vendorId));
+    } else if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((snapDoc) => arr.push({ id: snapDoc.id, ...snapDoc.data() }));
+      setFolders(arr);
+    });
+    return () => unsub();
+  }, [currentUser, userMeta]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let qRef = collection(db, "forms");
+
+    if (userMeta?.role === "vendor_admin" && userMeta.vendorId) {
+      qRef = query(qRef, where("vendorId", "==", userMeta.vendorId));
+    } else if (!userMeta || userMeta.role !== "super_admin") {
+      qRef = query(qRef, where("userId", "==", currentUser.uid));
+    }
+
+    const unsub = onSnapshot(qRef, (snap) => {
+      const arr = [];
+      snap.forEach((snapDoc) => arr.push({ formId: snapDoc.id, ...snapDoc.data() }));
+      setAllForms(arr);
+    });
+    return () => unsub();
+  }, [currentUser, userMeta]);
+
+  useEffect(() => {
+    if (!form) return;
+    setRenameDraft(form.name || "");
+    setMoveFolderId(form.folderId || "");
+    setIsEditingName(false);
+  }, [form]);
+
+  const isNameTaken = (name, excludeFormId) => {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return false;
+    const formExists = allForms.some(
+      (f) => f.formId !== excludeFormId && (f.name || "").trim().toLowerCase() === normalized
+    );
+    const folderExists = folders.some((f) => (f.name || "").trim().toLowerCase() === normalized);
+    return formExists || folderExists;
+  };
+
+  const handleSaveRename = async () => {
+    if (!form?.formId) return;
+    const trimmed = renameDraft.trim();
+    if (!trimmed) {
+      toast.error("Please enter a form name.");
+      return;
+    }
+    if (isNameTaken(trimmed, form.formId)) {
+      toast.error("This name is already used by another form or folder.");
+      return;
+    }
+    if (trimmed === (form.name || "").trim()) {
+      setIsEditingName(false);
+      return;
+    }
+    setRenameSaving(true);
+    try {
+      const formDocRef = doc(db, "forms", form.formId);
+      await updateDoc(formDocRef, { name: trimmed });
+      onFormUpdated?.({ name: trimmed });
+      toast.success("Form name updated.");
+      setIsEditingName(false);
+    } catch (err) {
+      console.error("Rename form failed:", err);
+      toast.error("Could not update form name.");
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
+  const handleSaveMove = async () => {
+    if (!form?.formId) return;
+    const nextId = moveFolderId || null;
+    const currentId = form.folderId || null;
+    if (nextId === currentId) {
+      toast("Already in this folder.");
+      return;
+    }
+    setMoveSaving(true);
+    try {
+      const formDocRef = doc(db, "forms", form.formId);
+      await updateDoc(formDocRef, { folderId: nextId });
+      onFormUpdated?.({ folderId: nextId });
+      toast.success("Form moved to folder.");
+    } catch (err) {
+      console.error("Move form failed:", err);
+      toast.error("Could not move form.");
+    } finally {
+      setMoveSaving(false);
+    }
+  };
 
   const loadCustomEmail = useCallback(async () => {
     try {
@@ -221,39 +338,140 @@ export default function FormDetails({ form }) {
   const fields = Array.from(allFields).filter((f) => f !== "_gotcha");
 
   return (
-    <div className="row h-100 flex-column overflow-hidden">
+    <div className="row h-100 flex-column">
       <div className="col-md-12 mb-4 flex-shrink-0">
-        <div className="card shadow-sm border-0">
-          <div className="card-body d-flex justify-content-between align-items-center">
-            <div>
-              <h4 className="card-title mb-1 fw-bold">{form.name}</h4>
-              <div className="d-flex align-items-center">
-                 <p className="text-primary mb-0 me-2 text-truncate d-inline-block" style={{ maxWidth: '300px' }}>{form.url}</p>
-                 <button
-                  onClick={() => copyToClipboard(form.url)}
-                  className="btn btn-light btn-icon d-inline-flex align-items-center justify-content-center p-1 ms-1"
-                  title={copied ? "Copied!" : "Copy URL"}
-                  style={{ width: "30px", height: "30px", borderRadius: "6px" }}
-                >
-                  <LucideIcon name={copied ? "check" : "copy"} className={`icon-sm ${copied ? "text-success" : "text-primary"}`} />
-                </button>
-                <span
-                  className={`ms-2 badge rounded-pill ${copied ? "bg-success-subtle text-success" : "bg-transparent text-transparent"}`}
-                  style={{ transition: "all 0.2s ease", minWidth: "56px" }}
-                >
-                  Copied
+        <div className="fd-form-toolbar">
+          <div className="fd-form-toolbar-accent" aria-hidden />
+          <div className="fd-form-toolbar-body">
+            <div className="fd-toolbar-top">
+              <div className="fd-form-meta">
+                <span className="fd-id-chip" title="Form ID">
+                  ID · {form.formId}
                 </span>
               </div>
-            </div>
-            <div>
               <button
+                type="button"
                 onClick={openEmailModal}
-                className="btn btn-outline-secondary btn-icon-text d-flex align-items-center"
+                className="btn fd-btn-notify"
                 title="Set notification email"
               >
-                <LucideIcon name="mail" className="icon-sm me-2" />
-                <span>Notification Email</span>
+                <LucideIcon name="mail" className="icon-sm" />
+                <span>Notification email</span>
               </button>
+            </div>
+
+            <div className="fd-pro-grid">
+              <div className="fd-pro-panel">
+                <div className="fd-pro-panel-head">
+                  <span className="fd-pro-panel-title">Display name</span>
+                </div>
+                {isEditingName ? (
+                  <div className="fd-pro-rename-row">
+                    <input
+                      type="text"
+                      className="form-control fd-pro-input"
+                      value={renameDraft}
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveRename();
+                        if (e.key === "Escape") {
+                          setRenameDraft(form.name || "");
+                          setIsEditingName(false);
+                        }
+                      }}
+                      autoFocus
+                      disabled={renameSaving}
+                      aria-label="Form display name"
+                    />
+                    <div className="fd-pro-rename-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm fd-pro-btn-min"
+                        onClick={handleSaveRename}
+                        disabled={renameSaving}
+                      >
+                        {renameSaving ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm fd-pro-btn-min"
+                        onClick={() => {
+                          setRenameDraft(form.name || "");
+                          setIsEditingName(false);
+                        }}
+                        disabled={renameSaving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="fd-pro-heading-row">
+                    <h4 className="fd-pro-heading mb-0">{form.name}</h4>
+                    <button
+                      type="button"
+                      className="fd-pro-edit-btn"
+                      title="Edit display name"
+                      onClick={() => setIsEditingName(true)}
+                      aria-label="Edit display name"
+                    >
+                      <LucideIcon name="pencil" className="icon-sm" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="fd-pro-panel">
+                <div className="fd-pro-panel-head">
+                  <span className="fd-pro-panel-title">Folder location</span>
+                  <span className="fd-pro-panel-hint">Move this form to another folder</span>
+                </div>
+                <div className="fd-pro-folder-row">
+                  <select
+                    id="fd-form-folder-select"
+                    className="form-select form-select-sm fd-pro-select"
+                    value={moveFolderId}
+                    onChange={(e) => setMoveFolderId(e.target.value)}
+                    disabled={moveSaving}
+                    aria-label="Select folder"
+                  >
+                    <option value="">None (direct)</option>
+                    {folders.map((fol) => (
+                      <option key={fol.id} value={fol.id}>
+                        {fol.name || fol.id}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm fd-pro-apply-btn"
+                    onClick={handleSaveMove}
+                    disabled={moveSaving}
+                  >
+                    {moveSaving ? "…" : "Apply"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="fd-pro-url">
+              <span className="fd-pro-url-label">Endpoint URL</span>
+              <div className="fd-pro-url-inner">
+                <code className="fd-pro-url-text">{form.url}</code>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(form.url)}
+                  className="btn fd-pro-url-copy"
+                  title={copied ? "Copied" : "Copy URL"}
+                  aria-label="Copy URL"
+                >
+                  <LucideIcon
+                    name={copied ? "check" : "copy"}
+                    className={`icon-sm ${copied ? "text-success" : "text-primary"}`}
+                  />
+                </button>
+                <span className={`fd-pro-copied ${copied ? "is-on" : ""}`}>Copied</span>
+              </div>
             </div>
           </div>
         </div>

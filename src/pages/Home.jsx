@@ -6,6 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import FormDetails from "../components/FormDetails.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import toast from "react-hot-toast";
+import AdminUsersTable from "../components/AdminUsersTable.jsx";
+import AdminFormsTable from "../components/AdminFormsTable.jsx";
 
 export default function Home() {
   const { formId } = useParams();
@@ -18,6 +20,13 @@ export default function Home() {
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [superAdminSection, setSuperAdminSection] = useState("dashboard");
+  const [superAdminMetrics, setSuperAdminMetrics] = useState({
+    users: 0,
+    folders: 0,
+    forms: 0,
+  });
+  const [metricsLoading, setMetricsLoading] = useState(true);
   const [useSubmissionFallbackNotifications, setUseSubmissionFallbackNotifications] = useState(false);
   const [clearNotificationsToken, setClearNotificationsToken] = useState(0);
   const [clearBeforeMs, setClearBeforeMs] = useState(0);
@@ -79,6 +88,63 @@ export default function Home() {
     return () => notificationsUnsub();
   }, [currentUser, clearBeforeMs]);
 
+  useEffect(() => {
+    if (!currentUser || userMeta?.role !== "super_admin") {
+      setMetricsLoading(false);
+      return;
+    }
+
+    setMetricsLoading(true);
+    let settledStreams = 0;
+    const markSettled = () => {
+      settledStreams += 1;
+      if (settledStreams >= 3) setMetricsLoading(false);
+    };
+
+    const usersUnsub = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        setSuperAdminMetrics((prev) => ({ ...prev, users: snap.size }));
+        markSettled();
+      },
+      (err) => {
+        console.warn("Super admin users metrics error:", err);
+        markSettled();
+      }
+    );
+
+    const foldersUnsub = onSnapshot(
+      collection(db, "folders"),
+      (snap) => {
+        setSuperAdminMetrics((prev) => ({ ...prev, folders: snap.size }));
+        markSettled();
+      },
+      (err) => {
+        console.warn("Super admin folders metrics error:", err);
+        markSettled();
+      }
+    );
+
+    const formsUnsub = onSnapshot(
+      collection(db, "forms"),
+      (snap) => {
+        setSuperAdminMetrics((prev) => ({ ...prev, forms: snap.size }));
+        markSettled();
+      },
+      (err) => {
+        console.warn("Super admin forms metrics error:", err);
+        markSettled();
+      }
+    );
+
+    return () => {
+      usersUnsub();
+      foldersUnsub();
+      formsUnsub();
+    };
+  }, [currentUser, userMeta?.role]);
+
+  
   // Fallback notifications from submissions when notifications collection is not readable by rules
   useEffect(() => {
     if (!currentUser || !useSubmissionFallbackNotifications) return;
@@ -329,10 +395,22 @@ export default function Home() {
 
   const handleSelectForm = (form) => {
     if (form) {
+      setSuperAdminSection("dashboard");
       navigate(`/forms/${form.formId}`, { replace: true });
     } else {
+      if (userMeta?.role === "super_admin") setSuperAdminSection("dashboard");
       navigate("/", { replace: true });
     }
+  };
+
+  const handleFormUpdated = (updates) => {
+    setSelectedForm((prev) => (prev ? { ...prev, ...updates } : null));
+  };
+
+  const handleSelectAdminSection = (section) => {
+    setSelectedForm(null);
+    setSuperAdminSection(section);
+    navigate("/", { replace: true });
   };
 
   const handleUpdateProfile = async (e) => {
@@ -352,6 +430,8 @@ export default function Home() {
         selectedForm={selectedForm}
         onClearAllNotifications={clearAllNotifications}
         clearNotificationsToken={clearNotificationsToken}
+        onSelectAdminSection={handleSelectAdminSection}
+        activeAdminSection={superAdminSection}
       />
       <div className="page-wrapper">
         <nav className="navbar" style={{ zIndex: 1000 }}>
@@ -578,8 +658,77 @@ export default function Home() {
                 <span className="visually-hidden">Loading...</span>
               </div>
             </div>
+          ) : userMeta?.role === "super_admin" && !selectedForm ? (
+            superAdminSection === "users" ? (
+              <div className="py-3">
+                <AdminUsersTable />
+              </div>
+            ) : superAdminSection === "forms" ? (
+              <div className="py-3">
+                <AdminFormsTable />
+              </div>
+            ) : (
+              <div className="py-3">
+                <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+                  <div>
+                    <h4 className="mb-1 fw-bold">Super Admin Dashboard</h4>
+                    <p className="text-muted mb-0 fs-14px">Global platform snapshot across users, folders, and forms.</p>
+                  </div>
+                  <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill text-uppercase" style={{ letterSpacing: "0.4px" }}>
+                    Live Metrics
+                  </span>
+                </div>
+
+                <div className="row g-3">
+                  <div className="col-md-4">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body p-4">
+                        <div className="d-flex align-items-center justify-content-between mb-3">
+                          <span className="text-muted fw-semibold fs-14px">Total Users</span>
+                          <span className="rounded-circle bg-primary-subtle d-inline-flex align-items-center justify-content-center" style={{ width: "40px", height: "40px" }}>
+                            <LucideIcon name="users" className="icon-sm text-primary" />
+                          </span>
+                        </div>
+                        <h2 className="fw-bold mb-1">{metricsLoading ? "..." : superAdminMetrics.users.toLocaleString()}</h2>
+                        <p className="text-muted mb-0 fs-12px">All registered platform accounts</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-4">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body p-4">
+                        <div className="d-flex align-items-center justify-content-between mb-3">
+                          <span className="text-muted fw-semibold fs-14px">Total Folders</span>
+                          <span className="rounded-circle bg-warning-subtle d-inline-flex align-items-center justify-content-center" style={{ width: "40px", height: "40px" }}>
+                            <LucideIcon name="folder" className="icon-sm text-warning" />
+                          </span>
+                        </div>
+                        <h2 className="fw-bold mb-1">{metricsLoading ? "..." : superAdminMetrics.folders.toLocaleString()}</h2>
+                        <p className="text-muted mb-0 fs-12px">Folders created across all admins</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-md-4">
+                    <div className="card border-0 shadow-sm h-100">
+                      <div className="card-body p-4">
+                        <div className="d-flex align-items-center justify-content-between mb-3">
+                          <span className="text-muted fw-semibold fs-14px">Total Forms</span>
+                          <span className="rounded-circle bg-success-subtle d-inline-flex align-items-center justify-content-center" style={{ width: "40px", height: "40px" }}>
+                            <LucideIcon name="file-text" className="icon-sm text-success" />
+                          </span>
+                        </div>
+                        <h2 className="fw-bold mb-1">{metricsLoading ? "..." : superAdminMetrics.forms.toLocaleString()}</h2>
+                        <p className="text-muted mb-0 fs-12px">Published and draft forms combined</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
           ) : (
-            <FormDetails form={selectedForm} />
+            <FormDetails form={selectedForm} onFormUpdated={handleFormUpdated} />
           )}
         </div>
       </div>

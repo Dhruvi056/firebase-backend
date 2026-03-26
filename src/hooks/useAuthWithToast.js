@@ -1,7 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
-// Custom hook that combines auth and toast functionality
 export const useAuthWithToast = () => {
   const { signup, login, logout, resetPassword, currentUser, updateUserMeta } = useAuth();
   const { addToast } = useToast();

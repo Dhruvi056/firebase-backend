@@ -19,7 +19,6 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
   const [isCreating, setIsCreating] = useState(false);
   const { currentUser,userMeta } = useAuth( );
 
-  // Helper component to render Lucide icons safely in React
   const LucideIcon = ({ name, className = "" }) => {
     useEffect(() => {
       if (window.lucide) {
@@ -35,7 +34,6 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
     );
   };
 
-  // Fetch folders
   useEffect(() => {
     if (!currentUser) return;
 

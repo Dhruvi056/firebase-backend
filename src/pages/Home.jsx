@@ -15,8 +15,16 @@ export default function Home() {
   const [selectedForm, setSelectedForm] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showProfileView, setShowProfileView] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editJoined, setEditJoined] = useState("");
+  const [editLives, setEditLives] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editAbout, setEditAbout] = useState("");
+  const [editPhotoURL, setEditPhotoURL] = useState("");
+  const [editCoverURL, setEditCoverURL] = useState("");
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -31,6 +39,10 @@ export default function Home() {
   const [clearNotificationsToken, setClearNotificationsToken] = useState(0);
   const [clearBeforeMs, setClearBeforeMs] = useState(0);
   const { currentUser, userMeta, logout, updateUserMeta } = useAuth();
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const photoInputRef = useRef(null);
+  const coverInputRef = useRef(null);
   const hasInitializedNotificationsRef = useRef(false);
   const notificationFormUnsubsRef = useRef({});
   const initializedNotificationListenersRef = useRef({});
@@ -42,7 +54,6 @@ export default function Home() {
     return Number.isNaN(parsed) ? 0 : parsed;
   };
 
-  // Live notifications scoped to logged-in user
   useEffect(() => {
     if (!currentUser) return;
     hasInitializedNotificationsRef.current = false;
@@ -104,7 +115,8 @@ export default function Home() {
     const usersUnsub = onSnapshot(
       collection(db, "users"),
       (snap) => {
-        setSuperAdminMetrics((prev) => ({ ...prev, users: snap.size }));
+        const vendorAdmins = snap.docs.filter(d => (d.data()?.role || "vendor_admin") === "vendor_admin").length;
+        setSuperAdminMetrics((prev) => ({ ...prev, users: vendorAdmins }));
         markSettled();
       },
       (err) => {
@@ -143,9 +155,6 @@ export default function Home() {
       formsUnsub();
     };
   }, [currentUser, userMeta?.role]);
-
-  
-  // Fallback notifications from submissions when notifications collection is not readable by rules
   useEffect(() => {
     if (!currentUser || !useSubmissionFallbackNotifications) return;
 
@@ -295,12 +304,10 @@ export default function Home() {
 
   const handleNotificationClick = async (notif) => {
     try {
+      setShowProfileView(false);
       if (notif.formId) {
-        // Open inside same dashboard view only (no new tab)
         navigate(`/forms/${notif.formId}`, { replace: true });
       }
-
-      // Requirement: clicking one notification clears all notifications
       await clearAllNotifications();
     } catch (err) {
       console.error("Failed to open/remove notification:", err);
@@ -309,7 +316,6 @@ export default function Home() {
 
   const handleNotificationBellClick = async () => {
     if (showNotificationMenu) {
-      // If menu is already open and user closes it, clear all notifications.
       await clearAllNotifications();
       return;
     }
@@ -317,27 +323,74 @@ export default function Home() {
   };
 
   const handleNotificationMenuBackdropClick = async () => {
-    // Requirement: when user exits/clicks outside notification popup, clear all.
     await clearAllNotifications();
   };
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
-  // Initialize and update theme
   useEffect(() => {
     document.documentElement.setAttribute('data-bs-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Sync editName with userMeta
   useEffect(() => {
+    if (showEditProfile) return;
     if (userMeta?.name) setEditName(userMeta.name);
-  }, [userMeta]);
+  }, [userMeta, showEditProfile]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // Helper component to render Lucide icons safely in React
+  const profileName = userMeta?.name || "User";
+  const profileEmail = userMeta?.email || currentUser?.email || "";
+  const profileAvatarSrc = userMeta?.photoURL || currentUser?.photoURL || "";
+  const profileCoverSrc = userMeta?.coverURL || "";
+
+  const initials = profileName
+    .split(" ")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
+
+  const getCoverStyle = () => {
+    if (profileCoverSrc) {
+      return {
+        backgroundImage: `url(${profileCoverSrc})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
+    }
+
+    return {
+      backgroundImage: "linear-gradient(135deg, rgba(101,113,255,1), rgba(102,209,209,0.9))",
+    };
+  };
+
+  const openProfileView = () => {
+    setShowProfileMenu(false);
+    setShowEditProfile(false);
+    setShowProfileView(true);
+    setSelectedForm(null);
+    if (userMeta?.role === "super_admin") setSuperAdminSection("dashboard");
+  };
+
+  const openEditProfile = () => {
+    setShowProfileMenu(false);
+    setShowProfileView(true);
+    setShowEditProfile(true);
+
+    setEditName(userMeta?.name || "");
+    setEditEmail(userMeta?.email || currentUser?.email || "");
+    setEditJoined(userMeta?.joined || "");
+    setEditLives(userMeta?.lives || "");
+    setEditWebsite(userMeta?.website || "");
+    setEditAbout(userMeta?.about || "");
+    setEditPhotoURL(userMeta?.photoURL || currentUser?.photoURL || "");
+    setEditCoverURL(userMeta?.coverURL || "");
+  };
+
   const LucideIcon = ({ name, className = "icon-md", style = {} }) => {
     useEffect(() => {
       if (window.lucide) {
@@ -354,7 +407,6 @@ export default function Home() {
     );
   };
 
-  // Load form from URL parameter
   useEffect(() => {
     if (!formId || !currentUser) {
       setSelectedForm(null);
@@ -363,6 +415,7 @@ export default function Home() {
 
     const loadForm = async () => {
       setLoading(true);
+      setShowProfileView(false);
       try {
         const ref = doc(db, "forms", formId);
         const snap = await getDoc(ref);
@@ -373,8 +426,6 @@ export default function Home() {
         }
 
         const data = snap.data();
-
-        // Vendor access control
         if (userMeta?.role === "vendor_admin" && userMeta.vendorId && data.vendorId && data.vendorId !== userMeta.vendorId) {
           console.warn("Access denied: vendor mismatch");
           navigate("/", { replace: true });
@@ -394,6 +445,7 @@ export default function Home() {
   }, [formId, currentUser, userMeta, navigate]);
 
   const handleSelectForm = (form) => {
+    setShowProfileView(false);
     if (form) {
       setSuperAdminSection("dashboard");
       navigate(`/forms/${form.formId}`, { replace: true });
@@ -408,18 +460,73 @@ export default function Home() {
   };
 
   const handleSelectAdminSection = (section) => {
+    setShowProfileView(false);
     setSelectedForm(null);
     setSuperAdminSection(section);
     navigate("/", { replace: true });
   };
 
+  const handleImageUpload = async (file, type) => {
+    if (!file) return;
+    const isPhoto = type === "photo";
+    
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File is too large (max 10MB)");
+      return;
+    }
+
+    try {
+      if (isPhoto) setIsUploadingPhoto(true);
+      else setIsUploadingCover(true);
+
+      console.log(`Starting ${type} upload to Cloudinary...`);
+      
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`${type} uploaded successfully to Cloudinary:`, data.url);
+
+      if (isPhoto) setEditPhotoURL(data.url);
+      else setEditCoverURL(data.url);
+      
+      toast.success(`${type} uploaded! Remember to save changes.`, { icon: "📸" });
+    } catch (err) {
+      console.error(`${type} upload error:`, err);
+      toast.error(`${type} upload failed. Check your Cloudinary config.`);
+    } finally {
+      if (isPhoto) setIsUploadingPhoto(false);
+      else setIsUploadingCover(false);
+    }
+  };
+
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      await updateUserMeta({ name: editName });
+      await updateUserMeta({
+        name: editName,
+        email: editEmail,
+        joined: editJoined,
+        lives: editLives,
+        website: editWebsite,
+        about: editAbout,
+        photoURL: editPhotoURL,
+        coverURL: editCoverURL,
+      });
       setShowEditProfile(false);
+      toast.success("Profile updated successfully.", { position: "top-right" });
     } catch (err) {
       console.error("Update profile failed:", err);
+      toast.error("Profile update failed. Please try again.", { position: "top-right" });
     }
   };
 
@@ -452,15 +559,7 @@ export default function Home() {
               </div>
             </form>
             <ul className="navbar-nav ms-auto flex-row align-items-center">
-              <li className="nav-item me-3">
-                <button 
-                  className="nav-link p-0 d-flex align-items-center border-0 bg-transparent shadow-none" 
-                  title="Apps" 
-                  type="button"
-                >
-                  <LucideIcon name="grid-2x2" className="icon-md" />
-                </button>
-              </li>
+
               <li className="nav-item me-3">
                 <button 
                   className="nav-link p-0 d-flex align-items-center border-0 bg-transparent shadow-none" 
@@ -570,7 +669,11 @@ export default function Home() {
                   type="button"
                 >
                   <div className="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center border" style={{ width: '38px', height: '38px', overflow: 'hidden' }}>
-                     <LucideIcon name="user" className="icon-sm text-primary" />
+                    {profileAvatarSrc ? (
+                      <img src={profileAvatarSrc} alt="profile" className="w-100 h-100 object-fit-cover" />
+                    ) : (
+                      <LucideIcon name="user" className="icon-sm text-primary" />
+                    )}
                   </div>
                 </button>
                 {showProfileMenu && (
@@ -596,8 +699,12 @@ export default function Home() {
                     >
                       <div className="p-4 border-bottom text-center bg-body-tertiary rounded-top">
                         <div className="mb-3 d-inline-block">
-                          <div className="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center border border-4 border-body shadow-sm mx-auto" style={{ width: '80px', height: '80px' }}>
-                             <LucideIcon name="user" style={{ width: '40px', height: '40px' }} className="text-primary" />
+                          <div className="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center border border-4 border-body shadow-sm mx-auto" style={{ width: '80px', height: '80px', overflow: 'hidden' }}>
+                            {profileAvatarSrc ? (
+                              <img src={profileAvatarSrc} alt="profile" className="w-100 h-100 object-fit-cover" />
+                            ) : (
+                              <LucideIcon name="user" style={{ width: '40px', height: '40px' }} className="text-primary" />
+                            )}
                           </div>
                         </div>
                         <h6 className="fw-bold mb-1 text-body">{userMeta?.name || "User"}</h6>
@@ -607,12 +714,18 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="p-2">
+                        <button
+                          className="dropdown-item py-2 px-3 rounded d-flex align-items-center border-0 bg-transparent w-100 mb-1"
+                          onClick={() => openProfileView()}
+                          type="button"
+                        >
+                          <LucideIcon name="user" className="icon-sm me-3 text-secondary" />
+                          <span className="fs-14px fw-medium">Profile</span>
+                        </button>
                         <button 
                           className="dropdown-item py-2 px-3 rounded d-flex align-items-center border-0 bg-transparent w-100 mb-1"
-                          onClick={() => {
-                            setShowProfileMenu(false);
-                            setShowEditProfile(true);
-                          }}
+                          onClick={() => openEditProfile()}
+                          type="button"
                         >
                           <LucideIcon name="settings" className="icon-sm me-3 text-secondary" />
                           <span className="fs-14px fw-medium">Edit Profile</span>
@@ -658,6 +771,207 @@ export default function Home() {
                 <span className="visually-hidden">Loading...</span>
               </div>
             </div>
+          ) : showProfileView ? (
+            <div className="py-3">
+              <div className="row">
+                <div className="col-12 grid-margin">
+                  <div className="card">
+                    <div className="position-relative">
+                      <figure className="overflow-hidden mb-0 d-flex justify-content-center">
+                        <div
+                          className="w-100 rounded-top"
+                          style={{ height: 180, ...getCoverStyle() }}
+                          aria-label="Profile cover"
+                        />
+                      </figure>
+
+                      <div className="d-flex justify-content-between align-items-center position-absolute top-90 w-100 px-2 px-md-4 mt-n4">
+                        <div className="d-flex align-items-center">
+                          <div
+                            className="w-70px rounded-circle overflow-hidden border border-3 border-body bg-white d-flex align-items-center justify-content-center"
+                            style={{ width: 70, height: 70 }}
+                            aria-label="Profile photo"
+                          >
+                            {profileAvatarSrc ? (
+                              <img
+                                src={profileAvatarSrc}
+                                alt="profile"
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              />
+                            ) : (
+                              <span className="fw-bold text-secondary">{initials || "U"}</span>
+                            )}
+                          </div>
+                          <span className="h4 ms-3 mb-0 text-white fw-bold" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.3)" }}>{profileName}</span>
+                        </div>
+
+                        <div className="d-none d-md-block">
+                          <button
+                            className="btn btn-primary d-inline-flex align-items-center"
+                            type="button"
+                            onClick={openEditProfile}
+                          >
+                            <LucideIcon name="edit" className="icon-sm me-2" />
+                            <span>Edit profile</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="d-flex justify-content-center p-3 rounded-bottom border-top bg-white">
+                      <ul className="d-flex align-items-center m-0 p-0" style={{ listStyle: "none" }}>
+                        <li className="d-flex align-items-center mx-3">
+                          <LucideIcon name="columns" className="me-1 icon-md text-primary" />
+                          <button type="button" className="pt-1px d-none d-md-block text-primary fw-bold border-0 bg-transparent" onClick={(e) => e.preventDefault()}>
+                            Timeline
+                          </button>
+                        </li>
+                        <li className="d-flex align-items-center mx-3 ps-3 border-start">
+                          <LucideIcon name="user" className="me-1 icon-md text-secondary" />
+                          <button type="button" className="pt-1px d-none d-md-block text-secondary border-0 bg-transparent" onClick={(e) => e.preventDefault()}>
+                            About
+                          </button>
+                        </li>
+                        <li className="d-flex align-items-center mx-3 ps-3 border-start">
+                          <LucideIcon name="users" className="me-1 icon-md text-secondary" />
+                          <button type="button" className="pt-1px d-none d-md-block text-secondary border-0 bg-transparent" onClick={(e) => e.preventDefault()}>
+                            Friends <span className="text-muted small ms-1">3,765</span>
+                          </button>
+                        </li>
+                        <li className="d-flex align-items-center mx-3 ps-3 border-start">
+                          <LucideIcon name="image" className="me-1 icon-md text-secondary" />
+                          <button type="button" className="pt-1px d-none d-md-block text-secondary border-0 bg-transparent" onClick={(e) => e.preventDefault()}>
+                            Photos
+                          </button>
+                        </li>
+                        <li className="d-flex align-items-center mx-3 ps-3 border-start">
+                          <LucideIcon name="video" className="me-1 icon-md text-secondary" />
+                          <button type="button" className="pt-1px d-none d-md-block text-secondary border-0 bg-transparent" onClick={(e) => e.preventDefault()}>
+                            Videos
+                          </button>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="row profile-body">
+                <div className="d-none d-md-block col-md-4 col-xl-3 left-wrapper">
+                  <div className="card rounded">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <h6 className="card-title mb-0">About</h6>
+                      </div>
+
+                      <p>
+                        {userMeta?.about
+                          ? userMeta.about
+                          : "Hi! Update your profile details, and they will appear here."}
+                      </p>
+
+                      <div className="mt-3">
+                        <label className="fs-11px fw-bolder mb-0 text-uppercase">Joined:</label>
+                        <p className="text-secondary">{userMeta?.joined || "—"}</p>
+                      </div>
+                      <div className="mt-3">
+                        <label className="fs-11px fw-bolder mb-0 text-uppercase">Lives:</label>
+                        <p className="text-secondary">{userMeta?.lives || "—"}</p>
+                      </div>
+                      <div className="mt-3">
+                        <label className="fs-11px fw-bolder mb-0 text-uppercase">Email:</label>
+                        <p className="text-secondary">{profileEmail || "—"}</p>
+                      </div>
+                      <div className="mt-3">
+                        <label className="fs-11px fw-bolder mb-0 text-uppercase">Website:</label>
+                        <p className="text-secondary">{userMeta?.website || "—"}</p>
+                      </div>
+
+                      <div className="mt-3 d-flex social-links" aria-label="Social links">
+                        <button type="button" className="btn btn-icon border btn-xs me-2" onClick={(e) => e.preventDefault()}>
+                          <LucideIcon name="github" className="icon-md" />
+                        </button>
+                        <button type="button" className="btn btn-icon border btn-xs me-2" onClick={(e) => e.preventDefault()}>
+                          <LucideIcon name="twitter" className="icon-md" />
+                        </button>
+                        <button type="button" className="btn btn-icon border btn-xs me-2" onClick={(e) => e.preventDefault()}>
+                          <LucideIcon name="instagram" className="icon-md" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-md-8 col-xl-6 middle-wrapper">
+                  <div className="row">
+                    <div className="col-md-12 grid-margin">
+                      <div className="card rounded">
+                        <div className="card-header">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <div
+                                className="img-xs rounded-circle overflow-hidden bg-body d-flex align-items-center justify-content-center"
+                                style={{ width: 38, height: 38 }}
+                              >
+                                {profileAvatarSrc ? (
+                                  <img
+                                    src={profileAvatarSrc}
+                                    alt=""
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                ) : (
+                                  <span className="fw-bold text-secondary">{initials || "U"}</span>
+                                )}
+                              </div>
+                              <div className="ms-2">
+                                <p className="mb-0">{profileName}</p>
+                                <p className="fs-11px text-secondary mb-0">Profile</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="card-body">
+                          <p className="mb-3 fs-14px">
+                            {userMeta?.about
+                              ? userMeta.about
+                              : "This is your profile space. Click “Edit profile” to update all your details."}
+                          </p>
+                          <div
+                            className="img-fluid rounded"
+                            style={{ height: 190, background: "rgba(101,113,255,0.10)" }}
+                          />
+                        </div>
+                        <div className="card-footer">
+                          <div className="d-flex post-actions">
+                            <button type="button" className="d-flex align-items-center text-secondary me-4" onClick={(e) => e.preventDefault()}>
+                              <LucideIcon name="heart" className="icon-md" />
+                              <p className="d-none d-md-block ms-2">Like</p>
+                            </button>
+                            <button type="button" className="d-flex align-items-center text-secondary me-4" onClick={(e) => e.preventDefault()}>
+                              <LucideIcon name="message-square" className="icon-md" />
+                              <p className="d-none d-md-block ms-2">Comment</p>
+                            </button>
+                            <button type="button" className="d-flex align-items-center text-secondary" onClick={(e) => e.preventDefault()}>
+                              <LucideIcon name="share" className="icon-md" />
+                              <p className="d-none d-md-block ms-2">Share</p>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="d-none d-xl-block col-xl-3">
+                  <div className="row">
+                    <div className="col-md-12 grid-margin">
+                      <div className="card rounded">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : userMeta?.role === "super_admin" && !selectedForm ? (
             superAdminSection === "users" ? (
               <div className="py-3">
@@ -681,37 +995,48 @@ export default function Home() {
 
                 <div className="row g-3">
                   <div className="col-md-4">
-                    <div className="card border-0 shadow-sm h-100">
+                    <div 
+                      className="card border-0 shadow-sm h-100" 
+                      role="button" 
+                      style={{ cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                      onClick={() => handleSelectAdminSection("users")}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-5px)';
+                        e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
                       <div className="card-body p-4">
                         <div className="d-flex align-items-center justify-content-between mb-3">
-                          <span className="text-muted fw-semibold fs-14px">Total Users</span>
+                          <span className="text-muted fw-semibold fs-14px">Total Vendors</span>
                           <span className="rounded-circle bg-primary-subtle d-inline-flex align-items-center justify-content-center" style={{ width: "40px", height: "40px" }}>
                             <LucideIcon name="users" className="icon-sm text-primary" />
                           </span>
                         </div>
                         <h2 className="fw-bold mb-1">{metricsLoading ? "..." : superAdminMetrics.users.toLocaleString()}</h2>
-                        <p className="text-muted mb-0 fs-12px">All registered platform accounts</p>
+                        <p className="text-muted mb-0 fs-12px">All registered vendor accounts</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="col-md-4">
-                    <div className="card border-0 shadow-sm h-100">
-                      <div className="card-body p-4">
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <span className="text-muted fw-semibold fs-14px">Total Folders</span>
-                          <span className="rounded-circle bg-warning-subtle d-inline-flex align-items-center justify-content-center" style={{ width: "40px", height: "40px" }}>
-                            <LucideIcon name="folder" className="icon-sm text-warning" />
-                          </span>
-                        </div>
-                        <h2 className="fw-bold mb-1">{metricsLoading ? "..." : superAdminMetrics.folders.toLocaleString()}</h2>
-                        <p className="text-muted mb-0 fs-12px">Folders created across all admins</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="col-md-4">
-                    <div className="card border-0 shadow-sm h-100">
+                    <div 
+                      className="card border-0 shadow-sm h-100" 
+                      role="button" 
+                      style={{ cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                      onClick={() => handleSelectAdminSection("forms")}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-5px)';
+                        e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
                       <div className="card-body p-4">
                         <div className="d-flex align-items-center justify-content-between mb-3">
                           <span className="text-muted fw-semibold fs-14px">Total Forms</span>
@@ -736,7 +1061,7 @@ export default function Home() {
       {/* Edit Profile Modal */}
       {showEditProfile && (
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1200 }}>
-          <div className="modal-dialog modal-dialog-centered modal-sm">
+          <div className="modal-dialog modal-dialog-centered modal-lg">
             <div className="modal-content border-0 shadow-lg">
               <div className="modal-header">
                 <h5 className="modal-title">Edit Profile</h5>
@@ -744,24 +1069,138 @@ export default function Home() {
               </div>
               <form onSubmit={handleUpdateProfile}>
                 <div className="modal-body p-4">
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">Full Name</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold">Email</label>
-                    <input 
-                      type="email" 
-                      className="form-control" 
-                      value={currentUser?.email} 
-                      disabled 
-                    />
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Photo URL</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editPhotoURL}
+                        onChange={(e) => setEditPhotoURL(e.target.value)}
+                        placeholder="Paste image URL or click below to upload"
+                      />
+                      <input
+                        type="file"
+                        className="d-none"
+                        ref={photoInputRef}
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0], "photo")}
+                      />
+                      <div className="mt-2 d-flex align-items-center">
+                        <div
+                          className="rounded-circle overflow-hidden border d-flex align-items-center justify-content-center position-relative cursor-pointer hover-opacity"
+                          style={{ width: 44, height: 44, background: "rgba(0,0,0,0.04)", cursor: "pointer" }}
+                          onClick={() => photoInputRef.current?.click()}
+                          title="Click to upload photo"
+                        >
+                          {isUploadingPhoto ? (
+                            <div className="spinner-border spinner-border-sm text-primary" role="status"></div>
+                          ) : editPhotoURL ? (
+                            <img
+                              src={editPhotoURL}
+                              alt="profile"
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                          ) : (
+                            <span className="fw-bold text-secondary">{initials || "U"}</span>
+                          )}
+                        </div>
+                        <span className="ms-2 small text-muted">Click image to upload or paste URL above</span>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Cover URL</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editCoverURL}
+                        onChange={(e) => setEditCoverURL(e.target.value)}
+                        placeholder="Paste cover URL or click upload"
+                      />
+                      <input
+                        type="file"
+                        className="d-none"
+                        ref={coverInputRef}
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0], "cover")}
+                      />
+                      <div className="mt-2">
+                         <button 
+                           type="button" 
+                           className="btn btn-outline-primary btn-xs"
+                           onClick={() => coverInputRef.current?.click()}
+                           disabled={isUploadingCover}
+                         >
+                           {isUploadingCover ? "Uploading..." : "Upload Cover Image"}
+                         </button>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Full Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Email</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Joined</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editJoined}
+                        onChange={(e) => setEditJoined(e.target.value)}
+                        placeholder="e.g., November 15, 2015"
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Lives</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editLives}
+                        onChange={(e) => setEditLives(e.target.value)}
+                        placeholder="e.g., New York, USA"
+                      />
+                    </div>
+
+                    <div className="col-md-12">
+                      <label className="form-label fw-bold">Website</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editWebsite}
+                        onChange={(e) => setEditWebsite(e.target.value)}
+                        placeholder="e.g., www.nobleui.com"
+                      />
+                    </div>
+
+                    <div className="col-md-12">
+                      <label className="form-label fw-bold">About</label>
+                      <textarea
+                        className="form-control"
+                        rows={4}
+                        value={editAbout}
+                        onChange={(e) => setEditAbout(e.target.value)}
+                        placeholder="Write something about yourself..."
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="modal-footer border-top-0 pt-0">

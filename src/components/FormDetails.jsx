@@ -31,7 +31,8 @@ export default function FormDetails({ form, onFormUpdated }) {
   const [submissions, setSubmissions] = useState([]);
   const [copied, setCopied] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [emailsList, setEmailsList] = useState([]);
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailSaved, setEmailSaved] = useState(false);
   const [viewingSubmission, setViewingSubmission] = useState(null);
@@ -171,7 +172,8 @@ export default function FormDetails({ form, onFormUpdated }) {
 
       if (formDoc.exists()) {
         const formData = formDoc.data();
-        setCustomEmail(formData.notificationEmail || "");
+        const emailStr = formData.notificationEmail || "";
+        setEmailsList(emailStr ? emailStr.split(',').map(e => e.trim()).filter(Boolean) : []);
       }
     } catch (error) {
       console.error("Error loading custom email:", error);
@@ -189,9 +191,10 @@ export default function FormDetails({ form, onFormUpdated }) {
     setEmailLoading(true);
 
     try {
+      const emailStr = emailsList.join(', ');
       const formDocRef = doc(db, 'forms', form.formId);
       await updateDoc(formDocRef, {
-        notificationEmail: customEmail
+        notificationEmail: emailStr
       });
 
       setEmailSaved(true);
@@ -199,13 +202,37 @@ export default function FormDetails({ form, onFormUpdated }) {
       setShowEmailModal(false);
     } catch (error) {
       console.error('Error saving custom email:', error);
+      toast.error('Failed to save emails');
     } finally {
       setEmailLoading(false);
     }
   };
 
+  const addEmail = () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (!trimmed) return;
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    
+    if (emailsList.includes(trimmed)) {
+      toast.error("Email already added");
+      return;
+    }
+    
+    setEmailsList([...emailsList, trimmed]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (index) => {
+    setEmailsList(emailsList.filter((_, i) => i !== index));
+  };
+
   const openEmailModal = () => {
-    loadCustomEmail(); // Reload current email when opening modal
+    loadCustomEmail(); 
     setShowEmailModal(true);
   };
 
@@ -213,8 +240,6 @@ export default function FormDetails({ form, onFormUpdated }) {
     if (!form) return;
 
     const ref = collection(db, `forms/${form.formId}/submissions`);
-
-    // Removed orderBy to avoid missing index errors that cause empty results
     const q = query(ref);
 
     const unsub = onSnapshot(
@@ -222,11 +247,8 @@ export default function FormDetails({ form, onFormUpdated }) {
       (snap) => {
         const list = snap.docs.map((doc) => {
           const data = doc.data();
-          
-          // Filter out soft-deleted submissions
           if (data.isDeleted) return null;
 
-          // Format date in Indian Standard Time (IST)
           let formattedDate = "N/A";
           if (data.submittedAt?.toDate) {
             const date = data.submittedAt.toDate();
@@ -248,11 +270,10 @@ export default function FormDetails({ form, onFormUpdated }) {
             id: doc.id,
             ...data,
             submittedAt: formattedDate,
-            _rawSubmittedAt: data.submittedAt // Keep for sorting if needed
+            _rawSubmittedAt: data.submittedAt 
           };
-        }).filter(Boolean); // Remove nulls (deleted items)
+        }).filter(Boolean); 
         
-        // Manual sort by date since we removed it from the query
         list.sort((a, b) => {
           const dateA = a._rawSubmittedAt?.toDate ? a._rawSubmittedAt.toDate() : new Date(a._rawSubmittedAt || 0);
           const dateB = b._rawSubmittedAt?.toDate ? b._rawSubmittedAt.toDate() : new Date(b._rawSubmittedAt || 0);
@@ -291,7 +312,6 @@ export default function FormDetails({ form, onFormUpdated }) {
     }
   };
 
-  // Helper component to render Lucide icons safely in React
   const LucideIcon = ({ name, className = "", style = {} }) => {
     useEffect(() => {
       if (window.lucide) {
@@ -323,11 +343,10 @@ export default function FormDetails({ form, onFormUpdated }) {
   const metaFields = ["id", "submittedAt", "folderId", "vendorId", "userId", "_rawSubmittedAt", "data"];
   
   submissions.forEach((s) => {
-    // Collect from sub-object 'data' if it exists
     if (s.data && typeof s.data === 'object') {
       Object.keys(s.data).forEach((f) => allFields.add(f));
     }
-    // Also collect from top level, excluding meta fields
+   
     Object.keys(s).forEach((f) => {
       if (!metaFields.includes(f)) {
         allFields.add(f);
@@ -506,7 +525,6 @@ export default function FormDetails({ form, onFormUpdated }) {
                     {submissions.map((sub) => (
                       <tr key={sub.id}>
                         {fields.map((f) => {
-                          // Check top level first, then nested data
                           const value = sub[f] !== undefined ? sub[f] : sub.data?.[f];
                           let cellContent = <span className="text-muted opacity-25">-</span>;
 
@@ -565,38 +583,85 @@ export default function FormDetails({ form, onFormUpdated }) {
       {showEmailModal && (
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1050 }}>
           <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content border-0 shadow">
-              <div className="modal-header">
-                <h5 className="modal-title">Notification Email</h5>
-                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowEmailModal(false)}></button>
+            <div className="modal-content border-0 shadow-lg">
+              <div className="modal-header border-bottom-0 pt-4 px-4">
+                <div className="d-flex align-items-center">
+                  <div className="bg-primary-subtle p-2 rounded-circle me-3 d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
+                    <LucideIcon name="mail" className="text-primary icon-sm" />
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold text-body mb-0">Notification Emails</h5>
+                    <p className="text-muted fs-12px mb-0">Manage where you receive submission alerts</p>
+                  </div>
+                </div>
+                <button type="button" className="btn-close shadow-none" aria-label="Close" onClick={() => setShowEmailModal(false)}></button>
               </div>
-              <div className="modal-body p-4">
+              <div className="modal-body p-4 pt-4">
+                <div className="mb-4">
+                  <label className="form-label fw-bold small text-uppercase ls-1 text-secondary mb-2">Recipient List</label>
+                  <div className="d-flex flex-wrap gap-2 mb-3 min-h-50px p-3 bg-light rounded-3 border border-dashed">
+                    {emailsList.length === 0 ? (
+                      <span className="text-muted small italic py-1">No recipient emails added yet.</span>
+                    ) : (
+                      emailsList.map((email, idx) => (
+                        <div key={idx} className="badge bg-white text-body border d-flex align-items-center py-2 px-3 rounded-pill shadow-sm animate-fadeIn">
+                          <span className="fs-13px fw-medium">{email}</span>
+                          <button 
+                            type="button" 
+                            className="btn-close ms-2 p-1" 
+                            style={{ fontSize: '0.55rem' }} 
+                            onClick={() => removeEmail(idx)}
+                            aria-label="Remove"
+                          ></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 <div className="mb-3">
-                  <label className="form-label fw-bold">Email Address</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    value={customEmail}
-                    onChange={(e) => setCustomEmail(e.target.value)}
-                    placeholder="Enter email for notifications"
-                  />
-                  <div className="form-text mt-2 fs-12px">
-                    You will receive an email notification whenever someone submits this form.
+                  <label className="form-label fw-bold small text-uppercase ls-1 text-secondary mb-2">Add New Recipient</label>
+                  <div className="input-group shadow-sm">
+                    <input
+                      type="email"
+                      className="form-control py-2 fs-14px border-end-0"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addEmail();
+                        }
+                      }}
+                      placeholder="e.g. notifications@company.com"
+                    />
+                    <button 
+                      className="btn btn-primary px-3 d-flex align-items-center fw-bold" 
+                      type="button" 
+                      onClick={addEmail}
+                    >
+                      <LucideIcon name="plus" className="icon-xs me-1" />
+                      Add
+                    </button>
+                  </div>
+                  <div className="form-text mt-3 bg-primary-subtle p-2 rounded text-primary-emphasis fs-12px d-flex align-items-start">
+                    <LucideIcon name="info" className="icon-xs mt-1 me-2" />
+                    <span>Multiple emails are supported. You will receive an alert on all listed addresses for every new submission.</span>
                   </div>
                 </div>
 
                 {emailSaved && (
-                  <div className="alert alert-success d-flex align-items-center py-2" role="alert">
+                  <div className="alert alert-success d-flex align-items-center py-2 border-0 shadow-sm mb-0 mt-3" role="alert">
                     <LucideIcon name="check-circle" className="icon-sm me-2" />
-                    <div>Email saved successfully!</div>
+                    <div className="small fw-bold">Settings updated!</div>
                   </div>
                 )}
               </div>
-              <div className="modal-footer border-top-0 pt-0">
-                <button type="button" className="btn btn-link text-secondary text-decoration-none me-2" onClick={() => setShowEmailModal(false)}>Cancel</button>
+              <div className="modal-footer border-top-0 pt-0 px-4 pb-4">
+                <button type="button" className="btn btn-link text-secondary text-decoration-none fw-medium me-2" onClick={() => setShowEmailModal(false)}>Cancel</button>
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="btn btn-primary px-4 fw-bold shadow-sm"
                   onClick={saveCustomEmail}
                   disabled={emailLoading}
                 >

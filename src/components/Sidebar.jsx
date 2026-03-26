@@ -24,7 +24,6 @@ export default function Sidebar({
   const submissionUnsubsRef = useRef({});
   const initializedSubmissionListenersRef = useRef({});
 
-  // Close logout menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showLogoutMenu && !event.target.closest('.logout-menu-container')) {
@@ -35,7 +34,6 @@ export default function Sidebar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLogoutMenu]);
 
-  // Fetch forms from Firestore for current user only
   useEffect(() => {
     if (!currentUser) return;
 
@@ -58,7 +56,6 @@ export default function Sidebar({
     return () => unsub();
   }, [currentUser, userMeta]);
 
-  // Fetch folders from Firestore for current user only
   useEffect(() => {
     if (!currentUser) return;
 
@@ -84,12 +81,10 @@ export default function Sidebar({
   const homeActive = !selectedForm;
   const isSuperAdmin = userMeta?.role === "super_admin";
 
-  // Group forms by folder
   const formsByFolder = {};
   
   forms.forEach((form) => {
     if (form.folderId) {
-      // Check if folder exists
       const folderExists = folders.some(folder => folder.id === form.folderId);
       if (folderExists) {
         if (!formsByFolder[form.folderId]) {
@@ -104,11 +99,9 @@ export default function Sidebar({
 
   const formsWithoutFolder = forms.filter(form => !form.folderId);
 
-  // Listen for new submissions per form and keep unread counts
   useEffect(() => {
     const activeFormIds = new Set(forms.map((f) => f.formId));
 
-    // Remove listeners for forms that no longer exist in sidebar
     Object.keys(submissionUnsubsRef.current).forEach((formId) => {
       if (!activeFormIds.has(formId)) {
         submissionUnsubsRef.current[formId]();
@@ -131,7 +124,6 @@ export default function Sidebar({
       submissionUnsubsRef.current[form.formId] = onSnapshot(
         submissionsQuery,
         (snap) => {
-          // Ignore initial snapshot to avoid counting historical rows as "new"
           if (!initializedSubmissionListenersRef.current[form.formId]) {
             initializedSubmissionListenersRef.current[form.formId] = true;
             return;
@@ -161,8 +153,6 @@ export default function Sidebar({
       );
     });
   }, [forms, selectedForm?.formId, addToast]);
-
-  // Clear unread count for currently opened form
   useEffect(() => {
     const activeFormId = selectedForm?.formId;
     if (!activeFormId) return;
@@ -174,13 +164,10 @@ export default function Sidebar({
       return next;
     });
   }, [selectedForm?.formId]);
-
-  // Clear all sidebar notification counters when navbar triggers global clear
   useEffect(() => {
     setNewSubmissionCounts({});
   }, [clearNotificationsToken]);
 
-  // Cleanup listeners on unmount
   useEffect(() => {
     return () => {
       Object.values(submissionUnsubsRef.current).forEach((unsub) => unsub());
@@ -189,7 +176,6 @@ export default function Sidebar({
     };
   }, []);
 
-  // Helper component to render Lucide icons safely in React
   const LucideIcon = ({ name, className = "" }) => {
     useEffect(() => {
       if (window.lucide) {
@@ -257,7 +243,7 @@ export default function Sidebar({
                   }}
                 >
                   <LucideIcon name="users" className="link-icon" />
-                  <span className="link-title">User</span>
+                  <span className="link-title">Vendor Admin</span>
                 </button>
               </li>
 

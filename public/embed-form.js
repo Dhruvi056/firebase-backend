@@ -59,7 +59,6 @@
   async function handleSubmit(e) {
     const form = e.target;
 
-    // ✅ NEW: use only formId
     const formId = form.getAttribute("data-form-id");
     if (!formId) return;
 
@@ -161,7 +160,6 @@
   }
 
   function attachToForm(form) {
-    // Skip if already attached
     if (FORMS_ATTACHED.has(form)) return;
 
     const formId = form.getAttribute("data-form-id");
@@ -174,11 +172,9 @@
   }
 
   function attach() {
-    // Attach to all existing forms
     document.querySelectorAll("form").forEach(attachToForm);
   }
 
-  // Watch for dynamically added forms
   function setupMutationObserver() {
     if (typeof MutationObserver === "undefined") return;
 
@@ -216,7 +212,6 @@
     setupMutationObserver();
   }
 
-  // Also attach immediately for forms that might already exist
   attach();
 })();
 

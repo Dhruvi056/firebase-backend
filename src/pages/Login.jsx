@@ -19,7 +19,6 @@ export default function Login() {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
-  // Spam protection
   const [lastResetAttempt, setLastResetAttempt] = useState(0);
   const [resetAttempts, setResetAttempts] = useState(0);
   const RESET_ATTEMPT_LIMIT = 3;
@@ -75,7 +74,6 @@ export default function Login() {
       setLoading(false);
       const code = err.code || "";
 
-      // For auth failures, show only common toast (handled in useAuthWithToast)
       if (
         code === "auth/user-not-found" ||
         code === "auth/invalid-email" ||

@@ -28,7 +28,6 @@ function RoutePersist() {
   const { currentUser } = useAuth();
 
   useEffect(() => {
-    // Save current route to localStorage (except login/signup)
     const currentPath = location.pathname;
     if (currentPath !== "/login" && currentPath !== "/signup") {
       localStorage.setItem("lastRoute", currentPath);
@@ -36,14 +35,9 @@ function RoutePersist() {
   }, [location]);
 
   useEffect(() => {
-    // Restore route on refresh if user is logged in
-    // Only run once when component mounts and user is authenticated
     if (currentUser) {
       const lastRoute = localStorage.getItem("lastRoute");
-      // Only restore if we're on home page (/) and there's a saved route that's different
       if (lastRoute && lastRoute !== "/" && lastRoute !== "/login" && lastRoute !== "/signup") {
-        // Only navigate if we're on the home page, not if we're already on a specific route
-        // Add small delay to prevent navigation conflicts
         const timer = setTimeout(() => {
           if (location.pathname === "/") {
             navigate(lastRoute, { replace: true });
@@ -53,8 +47,7 @@ function RoutePersist() {
         return () => clearTimeout(timer);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]); // Only run when currentUser changes, not on every pathname change
+  }, [currentUser, location.pathname, navigate]); 
 
   return null;
 }
@@ -145,7 +138,6 @@ function AppRoutes() {
 
 function App() {
   useEffect(() => {
-    // Initialize theme from localStorage or preferred scheme
     const savedTheme = localStorage.getItem('theme');
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const initialTheme = savedTheme || systemTheme;

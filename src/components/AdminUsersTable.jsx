@@ -35,10 +35,12 @@ export default function AdminUsersTable() {
     const unsub = onSnapshot(
       collection(db, "users"),
       (snap) => {
-        const arr = snap.docs.map((d) => ({
-          uid: d.id,
-          ...(d.data() || {}),
-        }));
+        const arr = snap.docs
+          .map((d) => ({
+            uid: d.id,
+            ...(d.data() || {}),
+          }))
+          .filter((u) => u.role !== "super_admin");
         setUsers(arr);
         setLoading(false);
       },
@@ -57,8 +59,8 @@ export default function AdminUsersTable() {
       <div className="card-body">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <div>
-            <h5 className="mb-1 fw-bold">Users</h5>
-            <p className="text-muted small mb-0">All registered platform users</p>
+            <h5 className="mb-1 fw-bold">Vendor Admins</h5>
+            <p className="text-muted small mb-0">All registered vendor accounts</p>
           </div>
           <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill">
             {loading ? "Loading..." : `${totalCount} users`}
@@ -153,7 +155,6 @@ export default function AdminUsersTable() {
                       name,
                       role: draftRole === "super_admin" ? "super_admin" : "vendor_admin",
                       vendorId,
-                      // keep email as-is; typically not editable here
                     });
                     toast.success("User updated.");
                     setShowEditModal(false);

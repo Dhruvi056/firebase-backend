@@ -122,13 +122,12 @@ async function handleFormSubmit(req, res) {
         const isPdf =
               file.mimetype === "application/pdf" ||
               file.originalname.toLowerCase().endsWith(".pdf");
-        let resourceType = isPdf ? "raw" : "auto"; // PDF must be raw so it downloads/views securely
+        let resourceType = isPdf ? "raw" : "auto"; 
 
         return new Promise((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
             {
               folder: `forms/${formId}`,
-              // For raw files, Cloudinary needs the exact extension inside the public_id
               public_id: isPdf ? `${timestamp}-${safeOriginalName}` : `${timestamp}-${safeOriginalName.replace(/\.[^/.]+$/, "")}`,
               resource_type: resourceType,
               
@@ -174,13 +173,13 @@ async function handleFormSubmit(req, res) {
       return res.status(400).json({ error: "No form data received" });
     }
 
-    // 1️⃣ Save submission
+    //Save submission
     await db.collection(`forms/${formId}/submissions`).add({
       data: cleanData,
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 2️⃣ Create in-app notification(s) for new submission
+    //Create in-app notification(s) for new submission
     const formDoc = await db.collection("forms").doc(formId).get();
 
     if (formDoc.exists) {
@@ -210,16 +209,11 @@ async function handleFormSubmit(req, res) {
         );
       }
 
-      // 3️⃣ Send email if configured
+      // Send email if configured
       const notifyEmail = formData.notifyEmail || formData.notificationEmail;
 
       if (notifyEmail) {
-        // For local development, send email directly
-        // For production/Vercel, we'll use the API approach
         if (process.env.NODE_ENV === 'production') {
-          // Vercel deployment - call the API route
-          // In Vercel, we can make a direct call to the API route
-          // We'll construct the full URL based on the request origin
           const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
                          req.get('host') ? `${req.protocol}://${req.get('host')}` : 
                          'http://localhost:3000';
@@ -230,10 +224,7 @@ async function handleFormSubmit(req, res) {
             formName: formData.name || formId,
             formUrl: formData.url || "N/A"
           };
-
-          // In Vercel, we can call the email service directly
           try {
-            // Require the email service and call it directly
             const { sendNotificationEmail } = require(path.join(__dirname, './src/utils/emailService'));
             
             await sendNotificationEmail(
@@ -248,25 +239,76 @@ async function handleFormSubmit(req, res) {
             console.error('Error sending email in Vercel:', emailError);
           }
         } else {
-          // Local development - send email directly
           try {
             await transporter.sendMail({
               from: `"Form App" <${process.env.EMAIL_USER}>`,
               to: notifyEmail,
               subject: `New Form Submission - ${formData.name || formId}`,
               html: `
-                <h2>New Form Submission</h2>
-                <p><b>Form:</b> ${formData.name || formId}</p>
-                <p><b>Form URL:</b> ${formData.url || "N/A"}</p>
-                <hr/>
-                ${Object.entries(cleanData)
-                  .map(
-                    ([key, value]) =>
-                      `<p><b>${key}:</b> ${
-                        Array.isArray(value) ? value.join(", ") : value
-                      }</p>`
-                  )
-                  .join("")}
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta charset="utf-8">
+                  <style>
+                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; }
+                    .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+                    .header { background: linear-gradient(135deg, #6571ff 0%, #060c17 100%); padding: 40px 20px; text-align: center; color: white; }
+                    .logo { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 5px; color: #ffffff; }
+                    .logo span { color: rgba(255,255,255,0.7); font-weight: 400; }
+                    .title { font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; margin-top: 10px; }
+                    .content { padding: 40px; }
+                    .form-info { background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 30px; border-left: 4px solid #6571ff; }
+                    .form-name { font-size: 18px; font-weight: 700; color: #060c17; margin-bottom: 5px; }
+                    .form-url { font-size: 13px; color: #6571ff; text-decoration: none; word-break: break-all; }
+                    .submission-data { width: 100%; border-collapse: separate; border-spacing: 0 12px; }
+                    .submission-data th { text-align: left; vertical-align: top; padding: 0 15px 0 0; color: #7987a1; font-size: 12px; text-transform: uppercase; font-weight: 600; width: 35%; padding-top: 4px; }
+                    .submission-data td { padding-bottom: 12px; border-bottom: 1px solid #edf1f7; color: #060c17; font-size: 15px; font-weight: 500; word-break: break-all; }
+                    .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-size: 13px; color: #aeb7c5; border-top: 1px solid #edf1f7; }
+                    .btn { display: inline-block; padding: 14px 28px; background-color: #6571ff; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; margin-top: 30px; box-shadow: 0 4px 14px rgba(101, 113, 255, 0.4); }
+                    .file-link { color: #6571ff; text-decoration: none; font-weight: 600; }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="header">
+                      <div class="logo">CS <span>Formly</span></div>
+                      <div class="title">New Submission</div>
+                    </div>
+                    <div class="content">
+                      <div class="form-info">
+                        <div class="form-name">${formData.name || formId}</div>
+                        <a href="${formData.url || 'N/A'}" class="form-url">${formData.url || "Form URL not provided"}</a>
+                      </div>
+                      
+                      <table class="submission-data">
+                        ${Object.entries(cleanData)
+                          .map(([key, value]) => {
+                            const displayValue = Array.isArray(value) 
+                              ? value.map(v => typeof v === 'string' && v.startsWith('http') ? `<a href="${v}" class="file-link">View Attachment</a>` : v).join(", ")
+                              : (typeof value === 'string' && value.startsWith('http')) 
+                                ? `<a href="${value}" class="file-link">View Attachment</a>` 
+                                : value;
+                                
+                            return `
+                              <tr>
+                                <th>${key}</th>
+                                <td>${displayValue}</td>
+                              </tr>
+                            `;
+                          }).join('')}
+                      </table>
+                      
+                      <div style="text-align: center; margin-top: 20px;">
+                        <a href="${formData.url || '#'}" class="btn">Go to Dashboard</a>
+                      </div>
+                    </div>
+                    <div class="footer">
+                      This notification was sent via <strong>CS Formly</strong>. <br/>
+                      The all-in-one headless form solution.
+                    </div>
+                  </div>
+                </body>
+                </html>
               `,
             });
             console.log(`📧 Email sent to ${notifyEmail}`);
@@ -277,7 +319,7 @@ async function handleFormSubmit(req, res) {
       }
     }
 
-    // 4️⃣ Build a friendly success message (used by embed-form.js toast)
+    // Build a friendly success message (used by embed-form.js toast)
     const { name, fname, lname } = cleanData;
     const fullName = name || [fname, lname].filter(Boolean).join(" ");
     const successPayload = {
@@ -299,7 +341,38 @@ async function handleFormSubmit(req, res) {
   }
 }
 
-// Primary routes
+// Profile Upload API
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  try {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "profile_photos",
+        resource_type: "auto",
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary upload error:", error);
+          return res.status(500).json({ error: "Cloudinary upload failed" });
+        }
+        res.json({ url: result.secure_url });
+      }
+    );
+
+    const { Readable } = require("stream");
+    const readable = new Readable();
+    readable.push(req.file.buffer);
+    readable.push(null);
+    readable.pipe(uploadStream);
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
 // Use multer to handle multipart/form-data (files) + regular fields
 app.post("/api/forms/:formId", upload.any(), handleFormSubmit);
 app.post("/api/f/:formId", upload.any(), handleFormSubmit);

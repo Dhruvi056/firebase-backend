@@ -12,7 +12,6 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate required config
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
   console.error("Firebase configuration is missing. Please check your .env file.");
   console.error("Missing values:", {

@@ -229,7 +229,7 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                   <p className="text-muted mb-4 small">
                     Add a descriptive name and select a folder to create your form endpoint.
                   </p>
-                  <form className="forms-sample">
+                  <form className="forms-sample" onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
                     <div className="mb-3">
                       <label className="form-label fw-semibold">Folder</label>
                       <select
@@ -238,8 +238,9 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                           setSelectedFolder(e.target.value);
                           setFormError("");
                         }}
-                        className="form-select"
+                        className="form-select shadow-none"
                         required
+                        style={{ borderColor: '#e9ecef' }}
                       >
                         <option value="">Select a Folder (required)</option>
                         {folders.map((folder) => (
@@ -253,9 +254,10 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                       <label className="form-label fw-semibold">Form Endpoint Name</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className="form-control shadow-none"
                         placeholder="e.g. job-application"
                         value={formName}
+                        style={{ borderColor: '#e9ecef' }}
                         onChange={(e) => {
                           setFormName(e.target.value);
                           setFormError("");
@@ -275,14 +277,15 @@ export default function AddFormPopup({ onClose, onSelectForm }) {
                   <p className="text-muted mb-4 small">
                     Enter a folder name to organize your forms.
                   </p>
-                  <form className="forms-sample">
+                  <form className="forms-sample" onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
                     <div className="mb-3">
                       <label className="form-label fw-semibold">Folder Name</label>
                       <input
                         type="text"
-                        className="form-control"
+                        className="form-control shadow-none"
                         placeholder="e.g. Project Alpha"
                         value={folderName}
+                        style={{ borderColor: '#e9ecef' }}
                         onChange={(e) => {
                           setFolderName(e.target.value);
                           setFolderError("");

@@ -4,16 +4,22 @@ import { db } from "../firebase";
 import toast from "react-hot-toast";
 import "../styles/components/admin-users-actions.css";
 
-export default function AdminUsersTable() {
+export default function AdminUsersTable({ searchQuery = "" }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [draftName, setDraftName] = useState("");
   const [draftRole, setDraftRole] = useState("vendor_admin");
   const [draftVendorId, setDraftVendorId] = useState("");
   const [editingSaving, setEditingSaving] = useState(false);
+
+  // Sync with global search
+  useEffect(() => {
+    if (searchQuery) setSearchTerm(searchQuery);
+  }, [searchQuery]);
 
   const totalCount = useMemo(() => users.length, [users.length]);
 
@@ -54,17 +60,54 @@ export default function AdminUsersTable() {
     return () => unsub();
   }, []);
 
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const name = (u.name || "").toLowerCase();
+      const email = (u.email || "").toLowerCase();
+      const vId = (u.vendorId || "").toLowerCase();
+      const s = searchTerm.toLowerCase();
+      return name.includes(s) || email.includes(s) || vId.includes(s);
+    });
+  }, [users, searchTerm]);
+
   return (
     <div className="card shadow-sm border-0">
       <div className="card-body">
+        <style>
+          {`
+            .custom-search-input-focus:focus-within {
+              border-color: #e9ecef !important;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+              transition: all 0.2s ease-in-out;
+            }
+            .form-control-custom:focus {
+              border-color: transparent !important;
+              box-shadow: none !important;
+            }
+          `}
+        </style>
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <div>
             <h5 className="mb-1 fw-bold">Vendor Admins</h5>
             <p className="text-muted small mb-0">All registered vendor accounts</p>
           </div>
-          <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill">
-            {loading ? "Loading..." : `${totalCount} users`}
-          </span>
+          <div className="d-flex align-items-center gap-3">
+            <div className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus d-none d-md-flex" style={{ width: '250px' }}>
+              <span className="input-group-text bg-white border-0 ps-3">
+                <LucideIcon name="search" className="text-muted icon-sm" />
+              </span>
+              <input
+                type="text"
+                className="form-control border-0 bg-transparent py-2 shadow-none form-control-custom"
+                placeholder="Search user, email, vendor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill">
+              {loading ? "Loading..." : `${totalCount} users`}
+            </span>
+          </div>
         </div>
 
         <div className="table-responsive">
@@ -79,7 +122,7 @@ export default function AdminUsersTable() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr key={u.uid}>
                   <td className="fw-semibold">{u.name || "-"}</td>
                   <td>{u.email || "-"}</td>
@@ -123,10 +166,10 @@ export default function AdminUsersTable() {
                   </td>
                 </tr>
               ))}
-              {users.length === 0 && !loading && (
+            {filteredUsers.length === 0 && !loading && (
                 <tr>
                   <td colSpan={5} className="text-center text-muted py-5">
-                    No users found.
+                    No users found matching your search.
                   </td>
                 </tr>
               )}

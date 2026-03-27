@@ -213,16 +213,19 @@ async function handleFormSubmit(req, res) {
       const notifyEmail = formData.notifyEmail || formData.notificationEmail;
 
       if (notifyEmail) {
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                       host ? `${protocol}://${host}` : 
+                       'http://localhost:3000';
+        const dashboardUrl = `${baseUrl}/forms/${formId}`;
+
         if (process.env.NODE_ENV === 'production') {
-          const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                         req.get('host') ? `${req.protocol}://${req.get('host')}` : 
-                         'http://localhost:3000';
-         
           const emailPayload = {
             toEmail: notifyEmail,
             formData: cleanData,
             formName: formData.name || formId,
-            formUrl: formData.url || "N/A"
+            formUrl: dashboardUrl
           };
           try {
             const { sendNotificationEmail } = require(path.join(__dirname, './src/utils/emailService'));
@@ -277,7 +280,7 @@ async function handleFormSubmit(req, res) {
                     <div class="content">
                       <div class="form-info">
                         <div class="form-name">${formData.name || formId}</div>
-                        <a href="${formData.url || 'N/A'}" class="form-url">${formData.url || "Form URL not provided"}</a>
+                        <a href="${dashboardUrl}" class="form-url">${dashboardUrl}</a>
                       </div>
                       
                       <table class="submission-data">
@@ -299,7 +302,7 @@ async function handleFormSubmit(req, res) {
                       </table>
                       
                       <div style="text-align: center; margin-top: 20px;">
-                        <a href="${formData.url || '#'}" class="btn">Go to Dashboard</a>
+                        <a href="${dashboardUrl}" class="btn">Go to Dashboard</a>
                       </div>
                     </div>
                     <div class="footer">

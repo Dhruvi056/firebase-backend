@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { db } from "../firebase";
 import { collection, query, onSnapshot, doc, getDoc, updateDoc, where } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
@@ -26,7 +26,7 @@ function isFileField(fieldName, value) {
   return looksLikeFileField || looksLikeUrl || looksLikeFileExtension;
 }
 
-export default function FormDetails({ form, onFormUpdated }) {
+export default function FormDetails({ form, onFormUpdated, searchQuery = "" }) {
   const { currentUser, userMeta } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -328,17 +328,6 @@ export default function FormDetails({ form, onFormUpdated }) {
     );
   };
 
-  if (!form) {
-    return (
-      <section className="flex-1 h-full flex items-center justify-center py-5">
-        <div className="text-center">
-          <LucideIcon name="inbox" className="text-secondary opacity-25 mb-4" style={{ width: '64px', height: '64px' }} />
-          <h4 className="text-secondary">Select a form to view submissions</h4>
-        </div>
-      </section>
-    );
-  }
-
   const allFields = new Set();
   const metaFields = ["id", "submittedAt", "folderId", "vendorId", "userId", "_rawSubmittedAt", "data"];
   
@@ -355,6 +344,30 @@ export default function FormDetails({ form, onFormUpdated }) {
   });
 
   const fields = Array.from(allFields).filter((f) => f !== "_gotcha");
+
+  const filteredSubmissions = useMemo(() => {
+    if (!searchQuery) return submissions;
+    const s = searchQuery.toLowerCase();
+    return submissions.filter((sub) => {
+      const subDate = (sub.submittedAt || "").toLowerCase();
+      const matchInFields = fields.some((f) => {
+        const value = sub[f] !== undefined ? sub[f] : sub.data?.[f];
+        return String(value || "").toLowerCase().includes(s);
+      });
+      return subDate.includes(s) || matchInFields;
+    });
+  }, [submissions, searchQuery, fields]);
+
+  if (!form) {
+    return (
+      <section className="flex-1 h-full flex items-center justify-center py-5">
+        <div className="text-center">
+          <LucideIcon name="inbox" className="text-secondary opacity-25 mb-4" style={{ width: '64px', height: '64px' }} />
+          <h4 className="text-secondary">Select a form to view submissions</h4>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="row h-100 flex-column">
@@ -500,7 +513,7 @@ export default function FormDetails({ form, onFormUpdated }) {
         <div className="card shadow-sm border-0 flex-grow-1 overflow-hidden">
           <div className="card-body d-flex flex-column h-100">
             <h6 className="card-title mb-4">
-              Submissions {submissions.length > 0 && <span className="text-secondary fw-normal">({submissions.length})</span>}
+              Submissions {filteredSubmissions.length > 0 && <span className="text-secondary fw-normal">({filteredSubmissions.length})</span>}
             </h6>
 
             {submissions.length === 0 ? (
@@ -522,7 +535,7 @@ export default function FormDetails({ form, onFormUpdated }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {submissions.map((sub) => (
+                    {filteredSubmissions.map((sub) => (
                       <tr key={sub.id}>
                         {fields.map((f) => {
                           const value = sub[f] !== undefined ? sub[f] : sub.data?.[f];

@@ -3,12 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function AdminFormsTable() {
+export default function AdminFormsTable({ searchQuery = "" }) {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [usersById, setUsersById] = useState({});
   const [usersByVendorId, setUsersByVendorId] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Sync local search with global search if provided
+  useEffect(() => {
+    if (searchQuery) setSearchTerm(searchQuery);
+  }, [searchQuery]);
   const [foldersById, setFoldersById] = useState({});
   //const [selectedVendor, setSelectedVendor] = useState("all");
   const [selectedRole, setSelectedRole] = useState("all");
@@ -143,6 +148,19 @@ export default function AdminFormsTable() {
   return (
     <div className="card shadow-sm border-0">
       <div className="card-body">
+        <style>
+          {`
+            .custom-search-input-focus:focus-within {
+              border-color: #e9ecef !important;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+              transition: all 0.2s ease-in-out;
+            }
+            .form-control-custom:focus {
+              border-color: transparent !important;
+              box-shadow: none !important;
+            }
+          `}
+        </style>
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
           <div>
             <h5 className="mb-1 fw-bold">All Forms</h5>
@@ -172,13 +190,13 @@ export default function AdminFormsTable() {
         <div className="row g-3 mb-4 bg-body-tertiary p-3 rounded-3 mx-0">
           <div className="col-12 col-md-4">
             <label className="form-label small fw-bold text-secondary">Search</label>
-              <div className="input-group input-group-sm">
-                <span className="input-group-text bg-white border-end-0">
+              <div className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus">
+                <span className="input-group-text bg-white border-0 ps-3">
                   <i className="text-muted" data-feather="search" style={{ width: '14px' }}></i>
                 </span>
                 <input
                   type="text"
-                  className="form-control border-start-0"
+                  className="form-control border-0 bg-transparent py-2 shadow-none form-control-custom"
                   placeholder="Name, ID, User..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}

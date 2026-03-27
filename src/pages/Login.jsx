@@ -21,14 +21,26 @@ export default function Login() {
   const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
   const [lastResetAttempt, setLastResetAttempt] = useState(0);
   const [resetAttempts, setResetAttempts] = useState(0);
+  const [rememberMe, setRememberMe] = useState(false);
   const RESET_ATTEMPT_LIMIT = 3;
   const RESET_COOLDOWN_TIME = 60000; // 1 minute in milliseconds
+
+  // Pre-fill email if rememberMe was previously checked
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("rememberedEmail");
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (loginSuccess && currentUser) {
       setLoading(false);
       toast.success("Welcome back! Logged in successfully.");
-      navigate("/", { replace: true });
+      const lastRoute = localStorage.getItem("lastRoute");
+      const target = (lastRoute && lastRoute !== "/login" && lastRoute !== "/signup") ? lastRoute : "/";
+      navigate(target, { replace: true });
       setLoginSuccess(false);
     } else if (loginSuccess && !currentUser) {
       setTimeout(() => {
@@ -67,6 +79,14 @@ export default function Login() {
 
     try {
       await login(email, password);
+
+      // Save or remove email from localStorage based on rememberMe checkbox
+      if (rememberMe) {
+        localStorage.setItem("rememberedEmail", email);
+      } else {
+        localStorage.removeItem("rememberedEmail");
+      }
+
       toast.success("Welcome back!", { position: 'top-right' });
       setLoginSuccess(true);
     } catch (err) {
@@ -127,7 +147,7 @@ export default function Login() {
       /test@test/i,
       /spam/i
     ];
-    
+
     if (suspiciousPatterns.some(pattern => pattern.test(resetEmail))) {
       setResetError("This email address cannot be used for password reset.");
       setResetLoading(false);
@@ -138,7 +158,7 @@ export default function Login() {
       // Update spam protection counters
       setLastResetAttempt(now);
       setResetAttempts(prev => prev + 1);
-      
+
       await resetPassword(resetEmail);
       setResetSuccess(true);
       setResetEmail("");
@@ -173,9 +193,9 @@ export default function Login() {
         window.lucide.createIcons();
       }
     }, [name]);
-    
+
     return (
-      <span 
+      <span
         className={`d-inline-flex align-items-center justify-content-center ${className}`}
         style={style}
         dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}"></i>` }}
@@ -185,17 +205,44 @@ export default function Login() {
 
   return (
     <div className="main-wrapper">
+      <style>
+        {`
+          .auth-form-input:focus {
+            outline: none;
+            box-shadow: none;
+          }
+          .custom-auth-group {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            transition: all 0.2s ease-in-out;
+            background-color: #fff;
+          }
+          .custom-auth-group:focus-within {
+             border-color: #e9ecef !important;
+             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+          }
+          .eye-icon-btn {
+            box-shadow: none !important;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+          }
+          .eye-icon-btn:hover {
+            opacity: 1;
+            background-color: transparent !important;
+          }
+        `}
+      </style>
       <div className="page-wrapper full-page">
         <div className="page-content container-xxl d-flex align-items-center justify-content-center">
           <div className="row w-100 mx-0 auth-page">
-            <div className="col-md-10 col-lg-8 col-xl-6 mx-auto">
+            <div className="col-md-8 col-lg-6 col-xl-4 mx-auto">
               <div className="card shadow-sm border-0 overflow-hidden">
                 <div className="row">
                   <div className="col-md-12 ps-md-0">
                     <div className="auth-form-wrapper px-4 py-5">
                       <div className="nobleui-logo d-block mb-2 text-center">CS <span>Formly</span></div>
                       <h5 className="text-secondary fw-normal mb-4 text-center">Welcome back! Log in to your account.</h5>
-                      
+
                       {formError && (
                         <div className="alert alert-danger py-2 d-flex align-items-center" role="alert">
                           <LucideIcon name="alert-circle" className="icon-sm me-2" />
@@ -206,25 +253,27 @@ export default function Login() {
                       <form className="forms-sample" onSubmit={handleSubmit} noValidate>
                         <div className="mb-3">
                           <label className="form-label">Email address</label>
-                          <input 
-                            type="email" 
-                            className={`form-control ${fieldErrors.email ? "is-invalid" : ""}`}
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => {
-                              setEmail(e.target.value);
-                              setFieldErrors((prev) => ({ ...prev, email: "" }));
-                            }}
-                          />
+                          <div className={`input-group custom-auth-group ${fieldErrors.email ? "border-danger" : ""}`}>
+                            <input
+                              type="email"
+                              className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.email ? "is-invalid" : ""}`}
+                              placeholder="Email"
+                              value={email}
+                              onChange={(e) => {
+                                setEmail(e.target.value);
+                                setFieldErrors((prev) => ({ ...prev, email: "" }));
+                              }}
+                            />
+                          </div>
                           {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
                         </div>
                         <div className="mb-3">
                           <label className="form-label">Password</label>
-                          <div className={`input-group ${fieldErrors.password ? "is-invalid" : ""}`}>
-                            <input 
-                              type={showPassword ? "text" : "password"} 
-                              className={`form-control ${fieldErrors.password ? "is-invalid" : ""}`}
-                              autoComplete="current-password" 
+                          <div className={`input-group custom-auth-group ${fieldErrors.password ? "border-danger" : ""}`}>
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.password ? "is-invalid" : ""}`}
+                              autoComplete="current-password"
                               placeholder="Password"
                               value={password}
                               onChange={(e) => {
@@ -232,37 +281,40 @@ export default function Login() {
                                 setFieldErrors((prev) => ({ ...prev, password: "" }));
                               }}
                               style={{
-                                borderRight: "none",
                                 backgroundImage: fieldErrors.password ? "none" : undefined,
                                 paddingRight: fieldErrors.password ? "0.75rem" : undefined,
                               }}
                             />
-                            <button 
-                              className={`btn btn-outline-secondary px-3 ${fieldErrors.password ? "border-danger text-danger" : ""}`} 
+                            <button
+                              className="btn btn-link d-flex align-items-center bg-transparent border-0 eye-icon-btn px-3"
                               type="button"
                               onClick={() => setShowPassword(!showPassword)}
                               style={{ 
-                                borderLeft: 'none',
-                                backgroundColor: 'transparent',
-                                borderTopRightRadius: '4px',
-                                borderBottomRightRadius: '4px',
-                                borderColor: 'var(--bs-border-color)'
+                                textDecoration: 'none', 
+                                color: 'inherit'
                               }}
+                              title={showPassword ? "Hide password" : "Show password"}
                             >
-                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '18px', height: '18px' }} />
                             </button>
                           </div>
                           {fieldErrors.password && <div className="invalid-feedback d-block">{fieldErrors.password}</div>}
                         </div>
                         <div className="mb-3 d-flex justify-content-between align-items-center">
                           <div className="form-check">
-                            <input type="checkbox" className="form-check-input" id="authCheck" />
-                            <label className="form-check-label ms-1" htmlFor="authCheck">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              id="authCheck"
+                              checked={rememberMe}
+                              onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <label className="form-check-label ms-1" htmlFor="authCheck" style={{ cursor: 'pointer' }}>
                               Remember me
                             </label>
                           </div>
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             className="btn btn-link p-0 text-decoration-none fs-13px"
                             onClick={() => {
                               setShowForgotPassword(true);
@@ -273,8 +325,8 @@ export default function Login() {
                           </button>
                         </div>
                         <div className="text-center pt-2">
-                          <button 
-                            type="submit" 
+                          <button
+                            type="submit"
                             className="btn btn-primary d-block w-100 text-white py-2 mb-3 shadow-sm fw-bold"
                             disabled={loading}
                           >
@@ -301,10 +353,10 @@ export default function Login() {
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content border-0 shadow-lg">
               <div className="modal-header border-0 pb-0">
-                <button 
-                  type="button" 
-                  className="btn-close" 
-                  aria-label="Close" 
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Close"
                   onClick={() => {
                     setShowForgotPassword(false);
                     setResetEmail("");
@@ -332,8 +384,8 @@ export default function Login() {
                   <form onSubmit={handleForgotPassword}>
                     <div className="mb-3 text-start">
                       <label className="form-label fw-semibold">Email Address</label>
-                      <input 
-                        type="email" 
+                      <input
+                        type="email"
                         required
                         className={`form-control ${resetError ? 'is-invalid' : ''}`}
                         placeholder="you@example.com"
@@ -345,8 +397,8 @@ export default function Login() {
                       />
                       {resetError && <div className="invalid-feedback">{resetError}</div>}
                     </div>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn btn-primary w-100 py-2 mb-3 shadow-sm"
                       disabled={resetLoading || (resetAttempts >= RESET_ATTEMPT_LIMIT && Date.now() - lastResetAttempt < RESET_COOLDOWN_TIME)}
                     >
@@ -354,9 +406,9 @@ export default function Login() {
                     </button>
                   </form>
                 )}
-                
-                <button 
-                  type="button" 
+
+                <button
+                  type="button"
                   className="btn btn-link text-secondary text-decoration-none"
                   onClick={() => setShowForgotPassword(false)}
                 >

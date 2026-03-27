@@ -4,7 +4,8 @@ import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 
 export default function Signup() {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,9 +23,9 @@ export default function Signup() {
         window.lucide.createIcons();
       }
     }, [name]);
-    
+
     return (
-      <span 
+      <span
         className={`d-inline-flex align-items-center justify-content-center ${className}`}
         style={style}
         dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}"></i>` }}
@@ -33,36 +34,39 @@ export default function Signup() {
   };
 
   const [fieldErrors, setFieldErrors] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
-    terms: "",
   });
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setFieldErrors({
-      fullName: "",
+      firstName: "",
+      lastName: "",
       email: "",
       password: "",
       confirmPassword: "",
-      terms: "",
     });
     setFormError("");
 
     const newFieldErrors = {
-      fullName: "",
+      firstName: "",
+      lastName: "",
       email: "",
       password: "",
       confirmPassword: "",
-      terms: "",
     };
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!fullName.trim()) {
-      newFieldErrors.fullName = "Full name is required.";
+    if (!firstName.trim()) {
+      newFieldErrors.firstName = "First name is required.";
+    }
+
+    if (!lastName.trim()) {
+      newFieldErrors.lastName = "Last name is required.";
     }
 
     if (!email.trim()) {
@@ -83,10 +87,6 @@ export default function Signup() {
       newFieldErrors.confirmPassword = "Password and confirm password must match.";
     }
 
-    if (!agreeToTerms) {
-      newFieldErrors.terms = "Please accept terms and conditions.";
-    }
-
     const hasFieldErrors = Object.values(newFieldErrors).some(Boolean);
     if (hasFieldErrors) {
       setFieldErrors(newFieldErrors);
@@ -95,7 +95,7 @@ export default function Signup() {
 
     try {
       setLoading(true);
-      await signup(email, password, fullName);
+      await signup(email, password, `${firstName} ${lastName}`.trim());
       toast.success("Account created successfully! Welcome!", {
         position: 'top-right',
         duration: 4000
@@ -128,17 +128,44 @@ export default function Signup() {
 
   return (
     <div className="main-wrapper">
+      <style>
+        {`
+          .auth-form-input:focus {
+            outline: none;
+            box-shadow: none;
+          }
+          .custom-auth-group {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            transition: all 0.2s ease-in-out;
+            background-color: #fff;
+          }
+          .custom-auth-group:focus-within {
+             border-color: #e9ecef !important;
+             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+          }
+          .eye-icon-btn {
+            box-shadow: none !important;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+          }
+          .eye-icon-btn:hover {
+            opacity: 1;
+            background-color: transparent !important;
+          }
+        `}
+      </style>
       <div className="page-wrapper full-page">
         <div className="page-content container-xxl d-flex align-items-center justify-content-center">
           <div className="row w-100 mx-0 auth-page">
-            <div className="col-md-10 col-lg-8 col-xl-6 mx-auto">
+            <div className="col-md-6 col-lg-4 col-xl-5 mx-auto">
               <div className="card shadow-sm border-0 overflow-hidden">
                 <div className="row">
                   <div className="col-md-12 ps-md-0">
                     <div className="auth-form-wrapper px-4 py-5">
                       <div className="nobleui-logo d-block mb-2 text-center">CS <span>Formly</span></div>
                       <h5 className="text-secondary fw-normal mb-4 text-center">Create a free account.</h5>
-                      
+
                       {formError && (
                         <div className="alert alert-danger py-2 d-flex align-items-center" role="alert">
                           <LucideIcon name="alert-circle" className="icon-sm me-2" />
@@ -147,119 +174,119 @@ export default function Signup() {
                       )}
 
                       <form className="forms-sample" onSubmit={handleSubmit} noValidate>
-                        <div className="mb-3">
-                          <label className="form-label">Full Name</label>
-                          <input 
-                            type="text" 
-                            className={`form-control ${fieldErrors.fullName ? "is-invalid" : ""}`}
-                            placeholder="Full Name"
-                            value={fullName}
-                            onChange={(e) => {
-                              setFullName(e.target.value);
-                              setFieldErrors((prev) => ({ ...prev, fullName: "" }));
-                            }}
-                          />
-                          {fieldErrors.fullName && <div className="invalid-feedback d-block">{fieldErrors.fullName}</div>}
+                        <div className="row">
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">First Name</label>
+                            <div className={`input-group custom-auth-group ${fieldErrors.firstName ? "border-danger" : ""}`}>
+                              <input
+                                type="text"
+                                className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.firstName ? "is-invalid" : ""}`}
+                                placeholder="First Name"
+                                value={firstName}
+                                onChange={(e) => {
+                                  setFirstName(e.target.value);
+                                  setFieldErrors((prev) => ({ ...prev, firstName: "" }));
+                                }}
+                              />
+                            </div>
+                            {fieldErrors.firstName && <div className="invalid-feedback d-block">{fieldErrors.firstName}</div>}
+                          </div>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">Last Name</label>
+                            <div className={`input-group custom-auth-group ${fieldErrors.lastName ? "border-danger" : ""}`}>
+                              <input
+                                type="text"
+                                className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.lastName ? "is-invalid" : ""}`}
+                                placeholder="Last Name"
+                                value={lastName}
+                                onChange={(e) => {
+                                  setLastName(e.target.value);
+                                  setFieldErrors((prev) => ({ ...prev, lastName: "" }));
+                                }}
+                              />
+                            </div>
+                            {fieldErrors.lastName && <div className="invalid-feedback d-block">{fieldErrors.lastName}</div>}
+                          </div>
                         </div>
                         <div className="mb-3">
                           <label className="form-label">Email address</label>
-                          <input 
-                            type="email" 
-                            className={`form-control ${fieldErrors.email ? "is-invalid" : ""}`}
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => {
-                              setEmail(e.target.value);
-                              setFieldErrors((prev) => ({ ...prev, email: "" }));
-                            }}
-                          />
+                          <div className={`input-group custom-auth-group ${fieldErrors.email ? "border-danger" : ""}`}>
+                            <input
+                              type="email"
+                              className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.email ? "is-invalid" : ""}`}
+                              placeholder="Email"
+                              value={email}
+                              onChange={(e) => {
+                                setEmail(e.target.value);
+                                setFieldErrors((prev) => ({ ...prev, email: "" }));
+                              }}
+                            />
+                          </div>
                           {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
                         </div>
                         <div className="mb-3">
                           <label className="form-label">Password</label>
-                          <div className="input-group">
-                            <input 
-                              type={showPassword ? "text" : "password"} 
-                              className={`form-control ${fieldErrors.password ? "is-invalid" : ""}`}
-                              autoComplete="new-password" 
+                          <div className={`input-group custom-auth-group ${fieldErrors.password ? "border-danger" : ""}`}>
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.password ? "is-invalid" : ""}`}
+                              autoComplete="new-password"
                               placeholder="Password"
                               value={password}
                               onChange={(e) => {
                                 setPassword(e.target.value);
                                 setFieldErrors((prev) => ({ ...prev, password: "" }));
                               }}
-                              style={{ borderRight: 'none' }}
                             />
-                            <button 
-                              className="btn btn-outline-secondary px-3" 
+                            <button
+                              className="btn btn-link d-flex align-items-center bg-transparent border-0 eye-icon-btn px-3"
                               type="button"
                               onClick={() => setShowPassword(!showPassword)}
                               style={{ 
-                                borderLeft: 'none',
-                                backgroundColor: 'transparent',
-                                borderTopRightRadius: '4px',
-                                borderBottomRightRadius: '4px',
-                                borderColor: 'var(--bs-border-color)'
+                                textDecoration: 'none', 
+                                color: 'inherit'
                               }}
+                              title={showPassword ? "Hide password" : "Show password"}
                             >
-                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                              <LucideIcon name={showPassword ? "eye-off" : "eye"} style={{ width: '18px', height: '18px' }} />
                             </button>
                           </div>
                           {fieldErrors.password && <div className="invalid-feedback d-block">{fieldErrors.password}</div>}
                         </div>
                         <div className="mb-3">
                           <label className="form-label">Confirm Password</label>
-                          <div className="input-group">
-                            <input 
-                              type={showConfirmPassword ? "text" : "password"} 
-                              className={`form-control ${fieldErrors.confirmPassword ? "is-invalid" : ""}`}
-                              autoComplete="new-password" 
+                          <div className={`input-group custom-auth-group ${fieldErrors.confirmPassword ? "border-danger" : ""}`}>
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              className={`form-control border-0 bg-transparent auth-form-input ${fieldErrors.confirmPassword ? "is-invalid" : ""}`}
+                              autoComplete="new-password"
                               placeholder="Confirm Password"
                               value={confirmPassword}
                               onChange={(e) => {
                                 setConfirmPassword(e.target.value);
                                 setFieldErrors((prev) => ({ ...prev, confirmPassword: "" }));
                               }}
-                              style={{ borderRight: 'none' }}
                             />
-                            <button 
-                              className="btn btn-outline-secondary px-3" 
+                            <button
+                              className="btn btn-link d-flex align-items-center bg-transparent border-0 eye-icon-btn px-3"
                               type="button"
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               style={{ 
-                                borderLeft: 'none',
-                                backgroundColor: 'transparent',
-                                borderTopRightRadius: '4px',
-                                borderBottomRightRadius: '4px',
-                                borderColor: 'var(--bs-border-color)'
+                                textDecoration: 'none', 
+                                color: 'inherit'
                               }}
+                              title={showConfirmPassword ? "Hide password" : "Show password"}
                             >
-                              <LucideIcon name={showConfirmPassword ? "eye-off" : "eye"} style={{ width: '16px', height: '16px' }} />
+                              <LucideIcon name={showConfirmPassword ? "eye-off" : "eye"} style={{ width: '18px', height: '18px' }} />
                             </button>
                           </div>
                           {fieldErrors.confirmPassword && (
                             <div className="invalid-feedback d-block">{fieldErrors.confirmPassword}</div>
                           )}
                         </div>
-                        <div className="form-check mb-3">
-                          <input
-                            type="checkbox"
-                            className={`form-check-input ${fieldErrors.terms ? "is-invalid" : ""}`}
-                            id="authCheck"
-                            checked={agreeToTerms}
-                            onChange={(e) => {
-                              setAgreeToTerms(e.target.checked);
-                              setFieldErrors((prev) => ({ ...prev, terms: "" }));
-                            }}
-                          />
-                          <label className="form-check-label ms-1" htmlFor="authCheck">
-                            I agree to the terms and conditions
-                          </label>
-                          {fieldErrors.terms && <div className="invalid-feedback d-block">{fieldErrors.terms}</div>}
-                        </div>
                         <div className="text-center pt-2">
-                          <button 
-                            type="submit" 
+                          <button
+                            type="submit"
                             className="btn btn-primary d-block w-100 text-white py-2 mb-3 shadow-sm fw-bold"
                             disabled={loading}
                           >

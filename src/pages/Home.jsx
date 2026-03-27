@@ -17,7 +17,8 @@ export default function Home() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileView, setShowProfileView] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
-  const [editName, setEditName] = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editJoined, setEditJoined] = useState("");
   const [editLives, setEditLives] = useState("");
@@ -41,6 +42,7 @@ export default function Home() {
   const { currentUser, userMeta, logout, updateUserMeta } = useAuth();
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const photoInputRef = useRef(null);
   const coverInputRef = useRef(null);
   const hasInitializedNotificationsRef = useRef(false);
@@ -334,7 +336,11 @@ export default function Home() {
 
   useEffect(() => {
     if (showEditProfile) return;
-    if (userMeta?.name) setEditName(userMeta.name);
+    if (userMeta?.name) {
+      const parts = userMeta.name.split(" ");
+      setEditFirstName(parts.shift() || "");
+      setEditLastName(parts.join(" ") || "");
+    }
   }, [userMeta, showEditProfile]);
 
   const toggleTheme = () => {
@@ -381,7 +387,9 @@ export default function Home() {
     setShowProfileView(true);
     setShowEditProfile(true);
 
-    setEditName(userMeta?.name || "");
+    const nameParts = (userMeta?.name || "").split(" ");
+    setEditFirstName(nameParts.shift() || "");
+    setEditLastName(nameParts.join(" ") || "");
     setEditEmail(userMeta?.email || currentUser?.email || "");
     setEditJoined(userMeta?.joined || "");
     setEditLives(userMeta?.lives || "");
@@ -513,7 +521,7 @@ export default function Home() {
     e.preventDefault();
     try {
       await updateUserMeta({
-        name: editName,
+        name: `${editFirstName} ${editLastName}`.trim(),
         email: editEmail,
         joined: editJoined,
         lives: editLives,
@@ -545,16 +553,34 @@ export default function Home() {
           <div className="navbar-content">
             <div className="logo-mini-wrapper">
             </div>
-            <form className="search-form flex-grow-1 mx-4 d-none d-md-block" style={{ maxWidth: '600px' }}>
-              <div className="input-group shadow-none border rounded-pill overflow-hidden bg-body-tertiary">
+            <form 
+              className="search-form flex-grow-1 mx-4 d-none d-md-block" 
+              style={{ maxWidth: '600px' }}
+              onSubmit={(e) => e.preventDefault()}
+            >
+              <style>
+                {`
+                  .custom-search-input:focus {
+                    box-shadow: none !important;
+                  }
+                  .input-group:focus-within {
+                    border-color: #e9ecef !important;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+                    transition: all 0.2s ease-in-out;
+                  }
+                `}
+              </style>
+              <div className="input-group shadow-none border rounded-pill overflow-hidden bg-white">
                 <div className="input-group-text border-0 bg-transparent ps-3">
                   <LucideIcon name="search" className="icon-sm text-secondary" />
                 </div>
                 <input 
                   type="text" 
-                  className="form-control border-0 bg-transparent fs-14px py-2" 
+                  className="form-control border-0 bg-transparent fs-14px py-2 shadow-none custom-search-input" 
                   id="navbarForm" 
                   placeholder="Search submissions, forms..." 
+                  value={globalSearchQuery}
+                  onChange={(e) => setGlobalSearchQuery(e.target.value)}
                 />
               </div>
             </form>
@@ -975,11 +1001,11 @@ export default function Home() {
           ) : userMeta?.role === "super_admin" && !selectedForm ? (
             superAdminSection === "users" ? (
               <div className="py-3">
-                <AdminUsersTable />
+                <AdminUsersTable searchQuery={globalSearchQuery} />
               </div>
             ) : superAdminSection === "forms" ? (
               <div className="py-3">
-                <AdminFormsTable />
+                <AdminFormsTable searchQuery={globalSearchQuery} />
               </div>
             ) : (
               <div className="py-3">
@@ -1053,7 +1079,7 @@ export default function Home() {
               </div>
             )
           ) : (
-            <FormDetails form={selectedForm} onFormUpdated={handleFormUpdated} />
+            <FormDetails form={selectedForm} onFormUpdated={handleFormUpdated} searchQuery={globalSearchQuery} />
           )}
         </div>
       </div>
@@ -1138,12 +1164,23 @@ export default function Home() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label fw-bold">Full Name</label>
+                      <label className="form-label fw-bold">First Name</label>
                       <input
                         type="text"
                         className="form-control"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label fw-bold">Last Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
                         required
                       />
                     </div>

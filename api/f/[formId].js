@@ -399,13 +399,21 @@ export default async function handler(req, res) {
 
         if (notifyEmail) {
           console.log(`Form has notification email configured: ${notifyEmail}`);
+          
+          const protocol = req.headers["x-forwarded-proto"] || "http";
+          const host = req.headers.host;
+          const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                         host ? `${protocol}://${host}` : 
+                         'http://localhost:3000';
+          const dashboardUrl = `${baseUrl}/forms/${formId}`;
+
           // Wait for email to be sent (with timeout protection)
           emailResult = await Promise.race([
             sendNotificationEmail(
               notifyEmail,
               formData,
               formData.name || formId,
-              formData.url || "N/A",
+              dashboardUrl,
               cleanData
             ),
             new Promise((_, reject) =>

@@ -380,6 +380,78 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 app.post("/api/forms/:formId", upload.any(), handleFormSubmit);
 app.post("/api/f/:formId", upload.any(), handleFormSubmit);
 
+/* -------------------- AUTHENTICATION API -------------------- */
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    // Generate the password reset link via Firebase Admin
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
+
+    // Extract oobCode and create a custom link to our frontend page
+    const parsedUrl = new URL(resetLink);
+    const oobCode = parsedUrl.searchParams.get("oobCode");
+    
+    const host = req.get("host");
+    const protocol = req.protocol === "http" && host.includes("cloudwaysapps.com") ? "https" : req.protocol;
+    const customResetLink = `${protocol}://${host}/reset-password?oobCode=${oobCode}`;
+
+    // Send styled email using nodemailer
+    await transporter.sendMail({
+      from: `"CS Formly" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Reset your CS Formly Password",
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+            .header { background: linear-gradient(135deg, #6571ff 0%, #060c17 100%); padding: 40px 20px; text-align: center; color: white; }
+            .logo { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 5px; color: #ffffff; }
+            .logo span { color: rgba(255,255,255,0.7); font-weight: 400; }
+            .title { font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; margin-top: 10px; }
+            .content { padding: 40px; text-align: center; }
+            .text { font-size: 16px; color: #060c17; line-height: 1.6; margin-bottom: 30px; }
+            .btn { display: inline-block; padding: 14px 28px; background-color: #6571ff; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; box-shadow: 0 4px 14px rgba(101, 113, 255, 0.4); }
+            .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-size: 13px; color: #aeb7c5; border-top: 1px solid #edf1f7; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">CS <span>Formly</span></div>
+              <div class="title">Password Reset Request</div>
+            </div>
+            <div class="content">
+              <p class="text">Hello,</p>
+              <p class="text">We received a request to reset your password for your CS Formly account. If you didn't make this request, you can safely ignore this email.</p>
+              <a href="${customResetLink}" class="btn">Reset Password</a>
+              <p class="text" style="margin-top: 30px; font-size: 14px; color: #7987a1;">Or copy and paste this link into your browser:<br/>
+                <a href="${customResetLink}" style="color: #6571ff; word-break: break-all;">${customResetLink}</a>
+              </p>
+            </div>
+            <div class="footer">
+              This notification was sent via <strong>CS Formly</strong>. <br/>
+              The all-in-one headless form solution.
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    return res.json({ success: true, message: "Password reset email sent" });
+  } catch (error) {
+    console.error("Error generating/sending password reset link:", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 /* -------------------- Serve React (Production) -------------------- */
 app.use(express.static(path.join(__dirname, "build")));
 

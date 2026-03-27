@@ -5,6 +5,7 @@ import { ToastProvider } from "./context/ToastContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ResetPassword from "./pages/ResetPassword";
 import { Toaster } from "react-hot-toast";
 
 function PrivateRoute({ children }) {
@@ -102,6 +103,14 @@ function AppRoutes() {
           element={
             <PublicRoute>
               <Signup />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <PublicRoute>
+              <ResetPassword />
             </PublicRoute>
           }
         />

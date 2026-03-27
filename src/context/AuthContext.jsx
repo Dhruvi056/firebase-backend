@@ -71,11 +71,28 @@ export function AuthProvider({ children }) {
     return signOut(auth);
   }
 
-  function resetPassword(email) {
+  async function resetPassword(email) {
     if (!auth) {
       throw new Error("Firebase Auth is not initialized. Please check your Firebase configuration.");
     }
-    return sendPasswordResetEmail(auth, email);
+    
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to send reset password email");
+      }
+      return await response.json();
+    } catch (err) {
+      console.error("Custom reset password error:", err);
+      // Fallback to default firebase if the API fails just in case
+      return sendPasswordResetEmail(auth, email);
+    }
   }
 
 useEffect(() => {

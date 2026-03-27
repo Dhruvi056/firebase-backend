@@ -382,7 +382,7 @@ app.post("/api/f/:formId", upload.any(), handleFormSubmit);
 
 /* -------------------- AUTHENTICATION API -------------------- */
 app.post("/api/auth/reset-password", async (req, res) => {
-  const { email } = req.body;
+  const { email, origin } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
@@ -395,9 +395,13 @@ app.post("/api/auth/reset-password", async (req, res) => {
     const parsedUrl = new URL(resetLink);
     const oobCode = parsedUrl.searchParams.get("oobCode");
     
-    const host = req.get("host");
-    const protocol = req.protocol === "http" && host.includes("cloudwaysapps.com") ? "https" : req.protocol;
-    const customResetLink = `${protocol}://${host}/reset-password?oobCode=${oobCode}`;
+    let baseUri = origin;
+    if (!baseUri) {
+      const host = req.get("host");
+      const protocol = req.protocol === "http" && host.includes("cloudwaysapps.com") ? "https" : req.protocol;
+      baseUri = `${protocol}://${host}`;
+    }
+    const customResetLink = `${baseUri}/reset-password?oobCode=${oobCode}`;
 
     // Send styled email using nodemailer
     await transporter.sendMail({

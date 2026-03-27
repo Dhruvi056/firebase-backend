@@ -395,12 +395,10 @@ app.post("/api/auth/reset-password", async (req, res) => {
     const parsedUrl = new URL(resetLink);
     const oobCode = parsedUrl.searchParams.get("oobCode");
     
-    let baseUri = origin;
-    if (!baseUri) {
-      const host = req.get("host");
-      const protocol = req.protocol === "http" && host.includes("cloudwaysapps.com") ? "https" : req.protocol;
-      baseUri = `${protocol}://${host}`;
-    }
+    const baseUri =
+    process.env.NODE_ENV === "production"
+    ? "https://phpstack-401163-6289434.cloudwaysapps.com"
+    : "http://localhost:3000";
     const customResetLink = `${baseUri}/reset-password?oobCode=${oobCode}`;
 
     // Send styled email using nodemailer

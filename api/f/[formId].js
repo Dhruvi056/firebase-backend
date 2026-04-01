@@ -1,8 +1,10 @@
-import admin from "firebase-admin";
 import querystring from "querystring";
 import nodemailer from "nodemailer";
 import { v2 as cloudinary } from "cloudinary";
 import Busboy from "busboy";
+import mongoose from "mongoose";
+import Form from "../../models/formModel.js";
+import Submission from "../../models/submissionModel.js";
 
 /* -------------------- Cloudinary Setup -------------------- */
 cloudinary.config({
@@ -11,46 +13,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-let db;
-if (!admin.apps.length) {
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-  if (privateKey) {
-    // Handle different escape formats (Vercel environment variables)
-    // Replace escaped newlines with actual newlines
-    privateKey = privateKey.replace(/\\n/g, "\n");
-    // Also handle if it's already a string with literal \n
-    privateKey = privateKey.replace(/\\\\n/g, "\n");
-    // Remove quotes if present
-    privateKey = privateKey.replace(/^["']|["']$/g, "");
-  }
-
-  if (!privateKey || !process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL) {
-    console.error("Missing Firebase configuration");
-    throw new Error("Firebase configuration is incomplete");
-  }
-
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey,
-      }),
-    });
-
-    db = admin.firestore();
-    console.log("Firebase Admin initialized successfully");
-  } catch (error) {
-    console.error("Firebase initialization error:", error.message);
-    throw error;
-  }
-} else {
-  db = admin.firestore();
+async function connectMongoOnce() {
+  if (mongoose.connection?.readyState === 1) return;
+  if (mongoose.connection?.readyState === 2) return;
+  await mongoose.connect(process.env.MONGO_URI);
 }
 
-// ---------------------
-// Helper: Parse Body (supports multipart with file uploads)
-// ---------------------
 function parseBody(req) {
   const contentType = req.headers["content-type"] || "";
 
@@ -89,7 +57,6 @@ function parseBody(req) {
     return { fields: req.body, files: [] };
   }
 
-  // Handle multipart/form-data using busboy
   if (contentType.includes("multipart/form-data")) {
     return new Promise((resolve, reject) => {
       const fields = {};
@@ -382,55 +349,47 @@ export default async function handler(req, res) {
       }
     }
 
-    //  Save to Firestore
-    await db.collection(`forms/${formId}/submissions`).add({
-      data: cleanData,
-      submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await connectMongoOnce();
+    const mongoForm = await Form.findById(formId).select("name settings").lean();
+    if (!mongoForm) {
+      return res.status(404).json({ error: "Form not found" });
+    }
+
+    await Submission.create({ form: formId, data: new Map(Object.entries(cleanData)) });
 
     // Send email notification if configured
     let emailResult = null;
     try {
-      const formDoc = await db.collection("forms").doc(formId).get();
-      
-      if (formDoc.exists) {
-        const formData = formDoc.data();
-        const notifyEmail = formData.notifyEmail || formData.notificationEmail;
+      const notifyEmail = mongoForm.settings?.notificationEmail;
+      if (notifyEmail) {
+        console.log(`Form has notification email configured: ${notifyEmail}`);
 
-        if (notifyEmail) {
-          console.log(`Form has notification email configured: ${notifyEmail}`);
-          
-          const protocol = req.headers["x-forwarded-proto"] || "http";
-          const host = req.headers.host;
-          const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                         host ? `${protocol}://${host}` : 
-                         'http://localhost:3000';
-          const dashboardUrl = `${baseUrl}/forms/${formId}`;
+        const protocol = req.headers["x-forwarded-proto"] || "http";
+        const host = req.headers.host;
+        const baseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : host
+            ? `${protocol}://${host}`
+            : "http://localhost:3000";
+        const dashboardUrl = `${baseUrl}/forms/${formId}`;
 
-          // Wait for email to be sent (with timeout protection)
-          emailResult = await Promise.race([
-            sendNotificationEmail(
-              notifyEmail,
-              formData,
-              formData.name || formId,
-              dashboardUrl,
-              cleanData
-            ),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Email timeout")), 8000)
-            ),
-          ]).catch((err) => {
-            console.error("Failed to send notification email:", err);
-            return { success: false, error: err.message };
-          });
-        } else {
-          console.log("No notification email configured for this form");
-        }
+        emailResult = await Promise.race([
+          sendNotificationEmail(
+            notifyEmail,
+            mongoForm,
+            mongoForm.name || formId,
+            dashboardUrl,
+            cleanData
+          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Email timeout")), 8000)),
+        ]).catch((err) => {
+          console.error("Failed to send notification email:", err);
+          return { success: false, error: err.message };
+        });
       } else {
-        console.log(`Form document ${formId} not found`);
+        console.log("No notification email configured for this form");
       }
     } catch (emailError) {
-      // Log but don't fail the request if email check fails
       console.error("Error checking for notification email:", emailError);
     }
 

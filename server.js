@@ -1,10 +1,23 @@
 require("dotenv").config();
 const express = require("express");
-const admin = require("firebase-admin");
 const path = require("path");
 const nodemailer = require("nodemailer");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
+const crypto = require("crypto");
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/authRoutes");
+const formRoutes = require("./routes/formRoutes");
+const folderRoutes = require("./routes/folderRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const submissionRoutes = require("./routes/submissionRoutes");
+const User = require("./models/userModel");
+const Form = require("./models/formModel");
+const Submission = require("./models/submissionModel");
+const {
+  parseNotificationEmails,
+  sendSubmissionNotificationEmails,
+} = require("./utils/submissionEmail");
 
 /* -------------------- Cloudinary Setup -------------------- */
 cloudinary.config({
@@ -12,30 +25,11 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-console.log("☁️ Cloudinary configured:", process.env.CLOUDINARY_CLOUD_NAME ? "YES" : "NO");
+console.log("Cloudinary configured:", process.env.CLOUDINARY_CLOUD_NAME ? "YES" : "NO");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-let db;
-
-if (!admin.apps.length) {
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-  if (privateKey) {
-    privateKey = privateKey.replace(/\\n/g, "\n");
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey,
-    }),
-  });
-
-  db = admin.firestore();
-  console.log(" Firebase Admin Initialized");
-}
+connectDB();
 
 /* -------------------- Middleware -------------------- */
 
@@ -50,6 +44,11 @@ const upload = multer({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/api/auth", authRoutes);
+app.use("/api/forms", formRoutes);
+app.use("/api/folders", folderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/submissions", submissionRoutes);
 // CORS
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -120,9 +119,9 @@ async function handleFormSubmit(req, res) {
 
         // Determine resource_type based on mimetype
         const isPdf =
-              file.mimetype === "application/pdf" ||
-              file.originalname.toLowerCase().endsWith(".pdf");
-        let resourceType = isPdf ? "raw" : "auto"; 
+          file.mimetype === "application/pdf" ||
+          file.originalname.toLowerCase().endsWith(".pdf");
+        let resourceType = isPdf ? "raw" : "auto";
 
         return new Promise((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
@@ -151,8 +150,6 @@ async function handleFormSubmit(req, res) {
               } else {
                 cleanData[fieldName] = [cleanData[fieldName], publicUrl];
               }
-
-              console.log(`☁️ File uploaded to Cloudinary: ${publicUrl}`);
               resolve(result);
             }
           );
@@ -173,171 +170,54 @@ async function handleFormSubmit(req, res) {
       return res.status(400).json({ error: "No form data received" });
     }
 
-    //Save submission
-    await db.collection(`forms/${formId}/submissions`).add({
-      data: cleanData,
-      submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const mongoForm = await Form.findById(formId).select("name settings").lean();
 
-    //Create in-app notification(s) for new submission
-    const formDoc = await db.collection("forms").doc(formId).get();
+    if (mongoForm) {
+      const dataMap = new Map(Object.entries(cleanData));
+      await Submission.create({ form: formId, data: dataMap });
 
-    if (formDoc.exists) {
-      const formData = formDoc.data();
-      const recipientIds = Array.from(
-        new Set([formData.userId, formData.vendorId].filter(Boolean))
-      );
-      const snippet =
-        cleanData.email ||
-        cleanData.name ||
-        Object.values(cleanData)[0] ||
-        "New submission";
+      const recipients = parseNotificationEmails(mongoForm.settings?.notificationEmail);
+      const protocol = req.protocol;
+      const host = req.get("host");
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : host
+          ? `${protocol}://${host}`
+          : "http://localhost:3000";
+      const dashboardUrl = `${baseUrl}/forms/${formId}`;
 
-      if (recipientIds.length > 0) {
-        await Promise.all(
-          recipientIds.map((uid) =>
-            db.collection("notifications").add({
-              userId: uid,
-              formId,
-              formName: formData.name || formId,
-              dataSnippet: String(snippet).slice(0, 180),
-              read: false,
-              type: "submission",
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            })
-          )
-        );
+      try {
+        await sendSubmissionNotificationEmails({
+          transporter,
+          fromUser: process.env.EMAIL_USER,
+          formName: mongoForm.name,
+          formId,
+          dashboardUrl,
+          cleanData,
+          recipients,
+        });
+      } catch (emailError) {
+        console.error("Mongo submission notification email error:", emailError);
       }
 
-      // Send email if configured
-      const notifyEmail = formData.notifyEmail || formData.notificationEmail;
+      const { name, fname, lname } = cleanData;
+      const fullName = name || [fname, lname].filter(Boolean).join(" ");
+      const successPayload = {
+        success: true,
+        message: fullName
+          ? `Form submitted successfully. Thank you, ${fullName}!`
+          : "Form submitted successfully",
+      };
+      const acceptsHeader = req.headers.accept || "";
+      const wantsJson = acceptsHeader.includes("application/json");
 
-      if (notifyEmail) {
-        const protocol = req.protocol;
-        const host = req.get('host');
-        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                       host ? `${protocol}://${host}` : 
-                       'http://localhost:3000';
-        const dashboardUrl = `${baseUrl}/forms/${formId}`;
-
-        if (process.env.NODE_ENV === 'production') {
-          const emailPayload = {
-            toEmail: notifyEmail,
-            formData: cleanData,
-            formName: formData.name || formId,
-            formUrl: dashboardUrl
-          };
-          try {
-            const { sendNotificationEmail } = require(path.join(__dirname, './src/utils/emailService'));
-            
-            await sendNotificationEmail(
-              emailPayload.toEmail,
-              emailPayload.formData,
-              emailPayload.formName,
-              emailPayload.formUrl
-            );
-            
-            console.log(`📧 Notification email sent to ${notifyEmail} via Vercel API`);
-          } catch (emailError) {
-            console.error('Error sending email in Vercel:', emailError);
-          }
-        } else {
-          try {
-            await transporter.sendMail({
-              from: `"Form App" <${process.env.EMAIL_USER}>`,
-              to: notifyEmail,
-              subject: `New Form Submission - ${formData.name || formId}`,
-              html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <meta charset="utf-8">
-                  <style>
-                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; }
-                    .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
-                    .header { background: linear-gradient(135deg, #6571ff 0%, #060c17 100%); padding: 40px 20px; text-align: center; color: white; }
-                    .logo { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 5px; color: #ffffff; }
-                    .logo span { color: rgba(255,255,255,0.7); font-weight: 400; }
-                    .title { font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; margin-top: 10px; }
-                    .content { padding: 40px; }
-                    .form-info { background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 30px; border-left: 4px solid #6571ff; }
-                    .form-name { font-size: 18px; font-weight: 700; color: #060c17; margin-bottom: 5px; }
-                    .form-url { font-size: 13px; color: #6571ff; text-decoration: none; word-break: break-all; }
-                    .submission-data { width: 100%; border-collapse: separate; border-spacing: 0 12px; }
-                    .submission-data th { text-align: left; vertical-align: top; padding: 0 15px 0 0; color: #7987a1; font-size: 12px; text-transform: uppercase; font-weight: 600; width: 35%; padding-top: 4px; }
-                    .submission-data td { padding-bottom: 12px; border-bottom: 1px solid #edf1f7; color: #060c17; font-size: 15px; font-weight: 500; word-break: break-all; }
-                    .footer { background-color: #f8f9fa; padding: 30px; text-align: center; font-size: 13px; color: #aeb7c5; border-top: 1px solid #edf1f7; }
-                    .btn { display: inline-block; padding: 14px 28px; background-color: #6571ff; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; margin-top: 30px; box-shadow: 0 4px 14px rgba(101, 113, 255, 0.4); }
-                    .file-link { color: #6571ff; text-decoration: none; font-weight: 600; }
-                  </style>
-                </head>
-                <body>
-                  <div class="container">
-                    <div class="header">
-                      <div class="logo">CS <span>Formly</span></div>
-                      <div class="title">New Submission</div>
-                    </div>
-                    <div class="content">
-                      <div class="form-info">
-                        <div class="form-name">${formData.name || formId}</div>
-                        <a href="${dashboardUrl}" class="form-url">${dashboardUrl}</a>
-                      </div>
-                      
-                      <table class="submission-data">
-                        ${Object.entries(cleanData)
-                          .map(([key, value]) => {
-                            const displayValue = Array.isArray(value) 
-                              ? value.map(v => typeof v === 'string' && v.startsWith('http') ? `<a href="${v}" class="file-link">View Attachment</a>` : v).join(", ")
-                              : (typeof value === 'string' && value.startsWith('http')) 
-                                ? `<a href="${value}" class="file-link">View Attachment</a>` 
-                                : value;
-                                
-                            return `
-                              <tr>
-                                <th>${key}</th>
-                                <td>${displayValue}</td>
-                              </tr>
-                            `;
-                          }).join('')}
-                      </table>
-                      
-                      <div style="text-align: center; margin-top: 20px;">
-                        <a href="${dashboardUrl}" class="btn">Go to Dashboard</a>
-                      </div>
-                    </div>
-                    <div class="footer">
-                      This notification was sent via <strong>CS Formly</strong>. <br/>
-                      The all-in-one headless form solution.
-                    </div>
-                  </div>
-                </body>
-                </html>
-              `,
-            });
-            console.log(`📧 Email sent to ${notifyEmail}`);
-          } catch (emailError) {
-            console.error('Error sending local email:', emailError);
-          }
-        }
+      if (wantsJson) {
+        return res.json(successPayload);
       }
+      return res.status(204).end();
     }
 
-    // Build a friendly success message (used by embed-form.js toast)
-    const { name, fname, lname } = cleanData;
-    const fullName = name || [fname, lname].filter(Boolean).join(" ");
-    const successPayload = {
-      success: true,
-      message: fullName
-        ? `Form submitted successfully. Thank you, ${fullName}!`
-        : "Form submitted successfully",
-    };
-    const acceptsHeader = req.headers.accept || "";
-    const wantsJson = acceptsHeader.includes("application/json");
-
-    if (wantsJson) {
-      return res.json(successPayload);
-    }
-  return res.status(204).end();
+    return res.status(404).json({ error: "Form not found in MongoDB" });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
@@ -380,29 +260,42 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 app.post("/api/forms/:formId", upload.any(), handleFormSubmit);
 app.post("/api/f/:formId", upload.any(), handleFormSubmit);
 
-/* -------------------- AUTHENTICATION API -------------------- */
+/* -------------------- AUTHENTICATION API (Mongo-based reset) -------------------- */
+// Step 1: request reset link
 app.post("/api/auth/reset-password", async (req, res) => {
-  const { email, origin } = req.body;
+  const { email, origin } = req.body || {};
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
 
   try {
-    // Generate the password reset link via Firebase Admin
-    const resetLink = await admin.auth().generatePasswordResetLink(email);
+    const user = await User.findOne({ email: email.toLowerCase() });
+    // For security, respond success even if user not found
+    if (!user) {
+      return res.json({ success: true, message: "If an account exists, a reset link has been sent." });
+    }
 
-    // Extract oobCode and create a custom link to our frontend page
-    const parsedUrl = new URL(resetLink);
-    const oobCode = parsedUrl.searchParams.get("oobCode");
-    
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    user.resetPasswordTokenHash = tokenHash;
+    user.resetPasswordExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await user.save();
+
     const baseUri =
-    process.env.NODE_ENV === "production"
-    ? "https://phpstack-401163-6289434.cloudwaysapps.com"
-    : "http://localhost:3000";
-    const customResetLink = `${baseUri}/reset-password?oobCode=${oobCode}`;
+      (typeof origin === "string" && origin.startsWith("http") ? origin : null) ||
+      process.env.FRONTEND_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://phpstack-401163-6289434.cloudwaysapps.com"
+        : "http://localhost:3001");
+    const customResetLink = `${baseUri}/reset-password?token=${rawToken}`;
 
-    // Send styled email using nodemailer
-    await transporter.sendMail({
+    // Always log link in dev to unblock testing
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[reset-password] DEV reset link:", customResetLink);
+    }
+
+    const info = await transporter.sendMail({
       from: `"CS Formly" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Reset your CS Formly Password",
@@ -447,9 +340,47 @@ app.post("/api/auth/reset-password", async (req, res) => {
       `,
     });
 
-    return res.json({ success: true, message: "Password reset email sent" });
+
+    return res.json({
+      success: true,
+      message: "Password reset email sent",
+      ...(process.env.NODE_ENV !== "production" ? { devResetLink: customResetLink } : {}),
+    });
   } catch (error) {
     console.error("Error generating/sending password reset link:", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Step 2: confirm reset
+app.post("/api/auth/reset-password/confirm", async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) {
+    return res.status(400).json({ error: "Token and new password are required" });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+
+  try {
+    const tokenHash = crypto.createHash("sha256").update(String(token)).digest("hex");
+    const user = await User.findOne({
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordExpiresAt: { $gt: new Date() },
+    }).select("+password");
+
+    if (!user) {
+      return res.status(400).json({ error: "Reset link is invalid or has expired." });
+    }
+
+    user.password = password;
+    user.resetPasswordTokenHash = "";
+    user.resetPasswordExpiresAt = null;
+    await user.save();
+
+    return res.json({ success: true, message: "Password reset successfully." });
+  } catch (error) {
+    console.error("Error confirming password reset:", error);
     return res.status(500).json({ error: error.message });
   }
 });

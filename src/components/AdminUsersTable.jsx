@@ -1,33 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { db } from "../firebase";
 import toast from "react-hot-toast";
-import "../styles/components/admin-users-actions.css";
 
 export default function AdminUsersTable({ searchQuery = "" }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [draftName, setDraftName] = useState("");
   const [draftRole, setDraftRole] = useState("vendor_admin");
   const [draftVendorId, setDraftVendorId] = useState("");
   const [editingSaving, setEditingSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
-  // Sync with global search
   useEffect(() => {
     if (searchQuery) setSearchTerm(searchQuery);
   }, [searchQuery]);
-
-  const totalCount = useMemo(() => users.length, [users.length]);
 
   const LucideIcon = ({ name, className = "", style = {} }) => {
     useEffect(() => {
       if (window.lucide) window.lucide.createIcons();
     }, [name]);
-
     return (
       <span
         className={`d-inline-flex align-items-center justify-content-center ${className}`}
@@ -37,38 +32,59 @@ export default function AdminUsersTable({ searchQuery = "" }) {
     );
   };
 
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "users"),
-      (snap) => {
-        const arr = snap.docs
-          .map((d) => ({
-            uid: d.id,
-            ...(d.data() || {}),
-          }))
-          .filter((u) => u.role !== "super_admin");
-        setUsers(arr);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("AdminUsersTable: error fetching users", err);
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/admin/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) {
+        toast.error(data?.message || "Failed to fetch users");
         setUsers([]);
-        setLoading(false);
+        return;
       }
-    );
+      setUsers(
+        (Array.isArray(data) ? data : []).map((u) => ({
+          ...u,
+          id: u._id,
+          joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—",
+          name: u.name || "-",
+          vendorId: u.vendorId || String(u._id),
+        }))
+      );
+    } catch (err) {
+      toast.error("Failed to fetch users");
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => unsub();
+  useEffect(() => {
+    fetchUsers();
   }, []);
 
   const filteredUsers = useMemo(() => {
+    const s = (searchTerm || "").toLowerCase();
     return users.filter((u) => {
       const name = (u.name || "").toLowerCase();
       const email = (u.email || "").toLowerCase();
       const vId = (u.vendorId || "").toLowerCase();
-      const s = searchTerm.toLowerCase();
       return name.includes(s) || email.includes(s) || vId.includes(s);
     });
   }, [users, searchTerm]);
+
+  const totalCount = users.length;
+
+  if (loading) {
+    return (
+      <div className="text-center py-5">
+        <div className="spinner-border text-primary" role="status"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="card shadow-sm border-0">
@@ -84,15 +100,28 @@ export default function AdminUsersTable({ searchQuery = "" }) {
               border-color: transparent !important;
               box-shadow: none !important;
             }
+            .admin-user-action-btn {
+              width: 34px;
+              height: 34px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              padding: 0;
+              border-radius: 10px;
+            }
           `}
         </style>
+
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <div>
             <h5 className="mb-1 fw-bold">Vendor Admins</h5>
             <p className="text-muted small mb-0">All registered vendor accounts</p>
           </div>
           <div className="d-flex align-items-center gap-3">
-            <div className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus d-none d-md-flex" style={{ width: '250px' }}>
+            <div
+              className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus d-none d-md-flex"
+              style={{ width: "250px" }}
+            >
               <span className="input-group-text bg-white border-0 ps-3">
                 <LucideIcon name="search" className="text-muted icon-sm" />
               </span>
@@ -105,7 +134,7 @@ export default function AdminUsersTable({ searchQuery = "" }) {
               />
             </div>
             <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill">
-              {loading ? "Loading..." : `${totalCount} users`}
+              {`${totalCount} users`}
             </span>
           </div>
         </div>
@@ -116,6 +145,7 @@ export default function AdminUsersTable({ searchQuery = "" }) {
               <tr>
                 <th className="text-uppercase fs-11px fw-bold text-secondary border-0">Name</th>
                 <th className="text-uppercase fs-11px fw-bold text-secondary border-0">Email</th>
+                <th className="text-uppercase fs-11px fw-bold text-secondary border-0">Joined</th>
                 <th className="text-uppercase fs-11px fw-bold text-secondary border-0">Role</th>
                 <th className="text-uppercase fs-11px fw-bold text-secondary border-0">Vendor ID</th>
                 <th className="text-uppercase fs-11px fw-bold text-secondary border-0 text-end">Actions</th>
@@ -123,11 +153,15 @@ export default function AdminUsersTable({ searchQuery = "" }) {
             </thead>
             <tbody>
               {filteredUsers.map((u) => (
-                <tr key={u.uid}>
+                <tr key={u.id}>
                   <td className="fw-semibold">{u.name || "-"}</td>
                   <td>{u.email || "-"}</td>
-                  <td className="text-capitalize">{(u.role || "admin").replace("_", " ")}</td>
-                  <td className="text-muted" style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>
+                  <td className="text-muted">{u.joined}</td>
+                  <td className="text-capitalize">{(u.role || "vendor_admin").replace("_", " ")}</td>
+                  <td
+                    className="text-muted"
+                    style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+                  >
                     {u.vendorId || "-"}
                   </td>
                   <td className="text-end">
@@ -149,15 +183,7 @@ export default function AdminUsersTable({ searchQuery = "" }) {
                       type="button"
                       className="btn btn-sm btn-outline-danger admin-user-action-btn"
                       onClick={async () => {
-                        const ok = window.confirm("Delete this user meta document? (Auth account will not be deleted)");
-                        if (!ok) return;
-                        try {
-                          await deleteDoc(doc(db, "users", u.uid));
-                          toast.success("User deleted (meta).");
-                        } catch (err) {
-                          console.error("Delete user failed:", err);
-                          toast.error("Failed to delete user.");
-                        }
+                        setDeleteTarget(u);
                       }}
                       title="Delete user"
                     >
@@ -166,9 +192,9 @@ export default function AdminUsersTable({ searchQuery = "" }) {
                   </td>
                 </tr>
               ))}
-            {filteredUsers.length === 0 && !loading && (
+              {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center text-muted py-5">
+                  <td colSpan={6} className="text-center text-muted py-5">
                     No users found matching your search.
                   </td>
                 </tr>
@@ -189,20 +215,28 @@ export default function AdminUsersTable({ searchQuery = "" }) {
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!editingUser?.uid) return;
+                  if (!editingUser?.id) return;
                   setEditingSaving(true);
                   try {
-                    const name = draftName.trim();
-                    const vendorId = draftVendorId.trim();
-                    await updateDoc(doc(db, "users", editingUser.uid), {
-                      name,
-                      role: draftRole === "super_admin" ? "super_admin" : "vendor_admin",
-                      vendorId,
+                    const token = localStorage.getItem("authToken");
+                    const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({
+                        name: draftName.trim(),
+                        role: draftRole,
+                        vendorId: draftVendorId.trim(),
+                      }),
                     });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                      toast.error(data.message || "Failed to update user.");
+                      return;
+                    }
                     toast.success("User updated.");
                     setShowEditModal(false);
+                    await fetchUsers();
                   } catch (err) {
-                    console.error("Update user failed:", err);
                     toast.error("Failed to update user.");
                   } finally {
                     setEditingSaving(false);
@@ -241,7 +275,7 @@ export default function AdminUsersTable({ searchQuery = "" }) {
                       className="form-control"
                       value={draftVendorId}
                       onChange={(e) => setDraftVendorId(e.target.value)}
-                      placeholder="e.g. uid / vendorId"
+                      placeholder="e.g. vendorId"
                     />
                   </div>
                 </div>
@@ -259,7 +293,74 @@ export default function AdminUsersTable({ searchQuery = "" }) {
           </div>
         </div>
       )}
+
+      {deleteTarget && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.55)", zIndex: 1200 }}>
+          <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: 420 }}>
+            <div className="modal-content border-0 shadow-lg" style={{ borderRadius: 16 }}>
+              <div className="modal-header border-0 pb-0 pt-4 px-4">
+                <div className="d-flex gap-3 align-items-start">
+                  <div
+                    className="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+                    style={{ width: 44, height: 44 }}
+                  >
+                    <LucideIcon name="trash-2" className="text-danger" style={{ width: 20, height: 20 }} />
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold mb-1">Soft delete user?</h5>
+                    <p className="text-muted small mb-0">
+                      User will be hidden from the list, but data stays in MongoDB.
+                    </p>
+                  </div>
+                </div>
+                <button type="button" className="btn-close mt-1" aria-label="Close" onClick={() => setDeleteTarget(null)} />
+              </div>
+              <div className="modal-body px-4 pt-3 pb-0">
+                <div className="alert alert-warning d-flex gap-2 align-items-start mb-0">
+                  <LucideIcon name="alert-triangle" className="flex-shrink-0 mt-1" style={{ width: 16, height: 16 }} />
+                  <div className="small">
+                    <div className="fw-semibold">{deleteTarget.name || "-"}</div>
+                    <div className="text-muted">{deleteTarget.email || "-"}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer border-0 px-4 pb-4 pt-3">
+                <button className="btn btn-light px-4" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger px-4"
+                  disabled={deleteBusy}
+                  onClick={async () => {
+                    try {
+                      setDeleteBusy(true);
+                      const token = localStorage.getItem("authToken");
+                      const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+                        method: "DELETE",
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        toast.error(data.message || "Failed to delete user.");
+                        return;
+                      }
+                      toast.success("User soft-deleted.");
+                      setDeleteTarget(null);
+                      await fetchUsers();
+                    } catch (err) {
+                      toast.error("Failed to delete user.");
+                    } finally {
+                      setDeleteBusy(false);
+                    }
+                  }}
+                >
+                  {deleteBusy ? "Deleting..." : "Yes, delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

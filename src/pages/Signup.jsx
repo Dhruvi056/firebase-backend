@@ -41,34 +41,23 @@ export default function Signup() {
     confirmPassword: "",
   });
 
+  /**
+   * Handles the signup form submission.
+   */
   async function handleSubmit(e) {
     e.preventDefault();
-    setFieldErrors({
-      firstName: "",
-      lastName: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-    });
+    
+    // Reset errors
+    setFieldErrors({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "" });
     setFormError("");
 
-    const newFieldErrors = {
-      firstName: "",
-      lastName: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-    };
+    // --- VALIDATION ---
+    const newFieldErrors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!firstName.trim()) {
-      newFieldErrors.firstName = "First name is required.";
-    }
-
-    if (!lastName.trim()) {
-      newFieldErrors.lastName = "Last name is required.";
-    }
-
+    if (!firstName.trim()) newFieldErrors.firstName = "First name is required.";
+    if (!lastName.trim()) newFieldErrors.lastName = "Last name is required.";
+    
     if (!email.trim()) {
       newFieldErrors.email = "Email is required.";
     } else if (!emailRegex.test(email.trim())) {
@@ -84,42 +73,35 @@ export default function Signup() {
     if (!confirmPassword) {
       newFieldErrors.confirmPassword = "Confirm password is required.";
     } else if (password !== confirmPassword) {
-      newFieldErrors.confirmPassword = "Password and confirm password must match.";
+      newFieldErrors.confirmPassword = "Passwords do not match.";
     }
 
-    const hasFieldErrors = Object.values(newFieldErrors).some(Boolean);
-    if (hasFieldErrors) {
+    // Stop if there are validation errors
+    if (Object.keys(newFieldErrors).length > 0) {
       setFieldErrors(newFieldErrors);
       return;
     }
 
+    // --- API CALL ---
     try {
       setLoading(true);
-      await signup(email, password, `${firstName} ${lastName}`.trim());
-      toast.success("Account created successfully! Welcome!", {
-        position: 'top-right',
-        duration: 4000
-      });
+      const fullName = `${firstName} ${lastName}`.trim();
+      
+      await signup(email, password, fullName);
+      
+      toast.success("Welcome! Your account has been created.", { position: 'top-right' });
       navigate("/");
+      
     } catch (err) {
-      console.error("Signup error details:", err);
-      if (err.code === "auth/email-already-in-use") {
-        setFieldErrors((prev) => ({
-          ...prev,
-          email: "This email is already in use. Please use another email.",
-        }));
-      } else if (err.code === "auth/invalid-email") {
-        setFieldErrors((prev) => ({
-          ...prev,
-          email: "Please enter a valid email address.",
-        }));
-      } else if (err.code === "auth/weak-password") {
-        setFieldErrors((prev) => ({
-          ...prev,
-          password: "Password is too weak. Use at least 6 characters.",
-        }));
+      console.error("Signup error:", err);
+      
+      const errorMessage = err.message || "Something went wrong. Please try again.";
+      
+      // Handle specific backend error cases
+      if (errorMessage.toLowerCase().includes("exists")) {
+        setFieldErrors(prev => ({ ...prev, email: "This email is already registered." }));
       } else {
-        setFormError(err.message || "Failed to create an account");
+        setFormError(errorMessage);
       }
     } finally {
       setLoading(false);

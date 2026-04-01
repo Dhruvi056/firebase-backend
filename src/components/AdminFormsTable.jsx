@@ -1,92 +1,50 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase";
+import { toast } from "react-hot-toast";
 
 export default function AdminFormsTable({ searchQuery = "" }) {
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [usersById, setUsersById] = useState({});
-  const [usersByVendorId, setUsersByVendorId] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Sync local search with global search if provided
-  useEffect(() => {
-    if (searchQuery) setSearchTerm(searchQuery);
-  }, [searchQuery]);
-  const [foldersById, setFoldersById] = useState({});
-  //const [selectedVendor, setSelectedVendor] = useState("all");
   const [selectedRole, setSelectedRole] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "forms"),
-      (snap) => {
-        const arr = snap.docs.map((d) => ({
-          formId: d.id,
-          ...(d.data() || {}),
-        }));
-        setForms(arr);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("AdminFormsTable: error fetching forms", err);
+    if (searchQuery) setSearchTerm(searchQuery);
+  }, [searchQuery]);
+
+  const fetchForms = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/admin/forms", { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) {
+        toast.error(data?.message || "Failed to fetch forms");
         setForms([]);
-        setLoading(false);
+        return;
       }
-    );
-    return () => unsub();
+      setForms(Array.isArray(data) ? data : []);
+    } catch (err) {
+      toast.error("Failed to fetch forms");
+      setForms([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "folders"),
-      (snap) => {
-        const map = {};
-        snap.forEach((d) => {
-          map[d.id] = d.data() || {};
-        });
-        setFoldersById(map);
-      },
-      (err) => {
-        console.error("AdminFormsTable: error fetching folders", err);
-        setFoldersById({});
-      }
-    );
-    return () => unsub();
-  }, []);
+    fetchForms();
+  }, [fetchForms]);
 
-  // Map users uid -> user document (name)
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "users"),
-      (snap) => {
-        const map = {};
-        const mapByVendor = {};
-        snap.forEach((d) => {
-          const data = d.data() || {};
-          map[d.id] = data;
-          const vendorKey = data.vendorId || d.id;
-          mapByVendor[vendorKey] = data;
-        });
-        setUsersById(map);
-        setUsersByVendorId(mapByVendor);
-      },
-      (err) => {
-        console.error("AdminFormsTable: error fetching users", err);
-        setUsersById({});
-        setUsersByVendorId({});
-      }
-    );
-    return () => unsub();
-  }, []);
+    if (window.lucide) window.lucide.createIcons();
+  });
 
   const createdAtText = (value) => {
     try {
-      if (value?.toDate) return value.toDate().toLocaleString();
-      if (value) return String(value);
+      if (value) return new Date(value).toLocaleString();
       return "-";
     } catch {
       return "-";
@@ -99,51 +57,39 @@ export default function AdminFormsTable({ searchQuery = "" }) {
     return pretty.charAt(0).toUpperCase() + pretty.slice(1);
   };
 
-  const getFormVendorName = useCallback((f) => {
-    return (
-      usersById?.[f.vendorId]?.name ||
-      usersByVendorId?.[f.vendorId]?.name ||
-      usersById?.[f.userId]?.name ||
-      usersById?.[f.vendorId]?.email ||
-      usersByVendorId?.[f.vendorId]?.email ||
-      usersById?.[f.userId]?.email ||
-      f.vendorId ||
-      "-"
-    );
-  }, [usersById, usersByVendorId]);
+  const getUserEmail = (f) => f.user?.email || "-";
+  const getUserRole = (f) => f.user?.role || "vendor_admin";
+  const getVendorName = (f) => f.user?.vendorId || f.vendorId || "-";
+
   const filteredForms = useMemo(() => {
+    const search = (searchTerm || "").toLowerCase();
     let result = forms.filter((f) => {
-      const vendorName = getFormVendorName(f).toLowerCase();
-      const userName = (usersById?.[f.userId]?.name || "").toLowerCase();
-      const userEmail = (usersById?.[f.userId]?.email || "").toLowerCase();
-      const userRole = usersById?.[f.userId]?.role || "vendor_admin";
       const formName = (f.name || "").toLowerCase();
-      const formId = (f.formId || "").toLowerCase();
-      const folderName = (foldersById?.[f.folderId]?.name || "").toLowerCase();
-      const search = searchTerm.toLowerCase();
+      const formId = String(f._id || "").toLowerCase();
+      const folderName = (f.folderId?.name || "").toLowerCase();
+      const userEmail = (f.user?.email || "").toLowerCase();
+      const userRole = getUserRole(f);
+      const vendor = String(getVendorName(f) || "").toLowerCase();
 
       const searchMatch =
         formName.includes(search) ||
         formId.includes(search) ||
-        userName.includes(search) ||
+        folderName.includes(search) ||
         userEmail.includes(search) ||
-        vendorName.includes(search) ||
-        folderName.includes(search);
+        vendor.includes(search);
 
-      //const vendorMatch = selectedVendor === "all" || f.vendorId === selectedVendor;
       const roleMatch = selectedRole === "all" || userRole === selectedRole;
-
-      return searchMatch  && roleMatch;
+      return searchMatch && roleMatch;
     });
 
     result.sort((a, b) => {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
     });
 
     return result;
-  }, [forms, searchTerm, selectedRole, sortOrder, foldersById, getFormVendorName, usersById]);
+  }, [forms, searchTerm, selectedRole, sortOrder]);
 
   return (
     <div className="card shadow-sm border-0">
@@ -161,6 +107,7 @@ export default function AdminFormsTable({ searchQuery = "" }) {
             }
           `}
         </style>
+
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
           <div>
             <h5 className="mb-1 fw-bold">All Forms</h5>
@@ -170,12 +117,11 @@ export default function AdminFormsTable({ searchQuery = "" }) {
             <span className="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill">
               {loading ? "Loading..." : `${filteredForms.length} shown`}
             </span>
-            {searchTerm ||  selectedRole !== "all" ? (
-              <button 
+            {searchTerm || selectedRole !== "all" ? (
+              <button
                 className="btn btn-link btn-sm text-muted p-0 text-decoration-none"
                 onClick={() => {
                   setSearchTerm("");
-                //  setSelectedVendor("all");
                   setSelectedRole("all");
                   setSortOrder("newest");
                 }}
@@ -186,31 +132,26 @@ export default function AdminFormsTable({ searchQuery = "" }) {
           </div>
         </div>
 
-        {/* Filter Bar */}
         <div className="row g-3 mb-4 bg-body-tertiary p-3 rounded-3 mx-0">
           <div className="col-12 col-md-4">
             <label className="form-label small fw-bold text-secondary">Search</label>
-              <div className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus">
-                <span className="input-group-text bg-white border-0 ps-3">
-                  <i className="text-muted" data-feather="search" style={{ width: '14px' }}></i>
-                </span>
-                <input
-                  type="text"
-                  className="form-control border-0 bg-transparent py-2 shadow-none form-control-custom"
-                  placeholder="Name, ID, User..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+            <div className="input-group input-group-sm border rounded-pill overflow-hidden bg-white custom-search-input-focus">
+              <span className="input-group-text bg-white border-0 ps-3">
+                <i className="text-muted" data-lucide="search" style={{ width: "14px" }}></i>
+              </span>
+              <input
+                type="text"
+                className="form-control border-0 bg-transparent py-2 shadow-none form-control-custom"
+                placeholder="Name, ID, User..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
+          </div>
 
           <div className="col-6 col-md-4">
-           <label className="form-label small fw-bold text-secondary">Filter by Role</label>
-            <select
-              className="form-select form-select-sm"
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-            >
+            <label className="form-label small fw-bold text-secondary">Filter by Role</label>
+            <select className="form-select form-select-sm" value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}>
               <option value="all">All Roles</option>
               <option value="super_admin">Super Admin</option>
               <option value="vendor_admin">Vendor Admin</option>
@@ -219,14 +160,10 @@ export default function AdminFormsTable({ searchQuery = "" }) {
 
           <div className="col-6 col-md-4">
             <label className="form-label small fw-bold text-secondary">Sort Order</label>
-              <select
-                className="form-select form-select-sm"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-            >
-               <option value="newest">Newest First</option>
-               <option value="oldest">Oldest First</option>
-              </select>
+            <select className="form-select form-select-sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
           </div>
         </div>
 
@@ -245,32 +182,24 @@ export default function AdminFormsTable({ searchQuery = "" }) {
             <tbody>
               {filteredForms.map((f) => (
                 <tr
-                  key={f.formId}
+                  key={String(f._id)}
                   role="button"
                   tabIndex={0}
                   style={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/forms/${f.formId}`)}
+                  onClick={() => navigate(`/forms/${f._id}`)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") navigate(`/forms/${f.formId}`);
+                    if (e.key === "Enter" || e.key === " ") navigate(`/forms/${f._id}`);
                   }}
                 >
-                  <td className="fw-semibold">
-                    {f.name || "-"}
-                  </td>
+                  <td className="fw-semibold">{f.name || "-"}</td>
+                  <td className="text-muted">{f.folderId?.name || "-"}</td>
+                  <td className="text-muted">{getUserEmail(f)}</td>
                   <td className="text-muted">
-                    {foldersById[f.folderId]?.name || f.folderId || "-"}
-                  </td>
-                  <td className="text-muted">
-                    {usersById?.[f.userId]?.email || f.userId || "-"}
-                  </td>
-                  <td className="text-muted">
-                    <span className={`badge ${usersById?.[f.userId]?.role === 'super_admin' ? 'bg-danger-subtle text-danger' : 'bg-info-subtle text-info'} px-2 py-1 rounded`}>
-                      {formatRoleLabel(usersById?.[f.userId]?.role || 'vendor_admin')}
+                    <span className={`badge ${getUserRole(f) === "super_admin" ? "bg-danger-subtle text-danger" : "bg-info-subtle text-info"} px-2 py-1 rounded`}>
+                      {formatRoleLabel(getUserRole(f))}
                     </span>
                   </td>
-                   <td className="text-muted">
-                    {getFormVendorName(f)}
-                  </td>
+                  <td className="text-muted">{getVendorName(f)}</td>
                   <td className="text-muted">{createdAtText(f.createdAt)}</td>
                 </tr>
               ))}
@@ -278,7 +207,7 @@ export default function AdminFormsTable({ searchQuery = "" }) {
                 <tr>
                   <td colSpan={6} className="text-center text-muted py-5">
                     <div className="d-flex flex-column align-items-center">
-                      <i className="mb-2 opacity-25" data-feather="search" style={{ width: '48px', height: '48px' }}></i>
+                      <i className="mb-2 opacity-25" data-lucide="search" style={{ width: "48px", height: "48px" }}></i>
                       <span>No forms match your search criteria.</span>
                     </div>
                   </td>
@@ -291,4 +220,3 @@ export default function AdminFormsTable({ searchQuery = "" }) {
     </div>
   );
 }
-

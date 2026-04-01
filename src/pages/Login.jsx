@@ -39,7 +39,13 @@ export default function Login() {
       setLoading(false);
       toast.success("Welcome back! Logged in successfully.");
       const lastRoute = localStorage.getItem("lastRoute");
-      const target = (lastRoute && lastRoute !== "/login" && lastRoute !== "/signup") ? lastRoute : "/";
+      const target =
+        lastRoute &&
+        lastRoute !== "/login" &&
+        lastRoute !== "/signup" &&
+        lastRoute !== "/reset-password"
+          ? lastRoute
+          : "/";
       navigate(target, { replace: true });
       setLoginSuccess(false);
     } else if (loginSuccess && !currentUser) {
@@ -53,34 +59,41 @@ export default function Login() {
     }
   }, [currentUser, loginSuccess, navigate]);
 
+  /**
+   * Handles the login form submission.
+   */
   async function handleSubmit(e) {
     e.preventDefault();
+    
+    // Reset errors
     setFieldErrors({ email: "", password: "" });
     setFormError("");
-    setLoading(true);
 
-    const nextErrors = { email: "", password: "" };
+    // --- VALIDATION ---
+    const nextErrors = {};
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     if (!email.trim()) {
       nextErrors.email = "Email is required.";
     } else if (!emailRegex.test(email.trim())) {
       nextErrors.email = "Please enter a valid email address.";
     }
 
-    if (!password || password.trim().length === 0) {
+    if (!password) {
       nextErrors.password = "Password is required.";
     }
 
-    if (nextErrors.email || nextErrors.password) {
+    if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);
-      setLoading(false);
       return;
     }
 
+    // --- API CALL ---
     try {
+      setLoading(true);
       await login(email, password);
 
-      // Save or remove email from localStorage based on rememberMe checkbox
+      // Handle "Remember Me"
       if (rememberMe) {
         localStorage.setItem("rememberedEmail", email);
       } else {
@@ -89,48 +102,43 @@ export default function Login() {
 
       toast.success("Welcome back!", { position: 'top-right' });
       setLoginSuccess(true);
+
     } catch (err) {
       setLoginSuccess(false);
       setLoading(false);
-      const code = err.code || "";
-
-      if (
-        code === "auth/user-not-found" ||
-        code === "auth/invalid-email" ||
-        code === "auth/wrong-password" ||
-        code === "auth/invalid-credential" ||
-        code === "auth/invalid-login-credentials"
-      ) {
-        setFieldErrors({ email: "", password: "" });
-        setFormError("");
-        return;
-      }
-
-      if (code === "auth/too-many-requests") {
+      
+      const errorMessage = err.message || "Failed to log in";
+      
+      // Handle common auth errors
+      if (errorMessage.toLowerCase().includes("invalid") || errorMessage.toLowerCase().includes("incorrect")) {
+        setFormError("Invalid email or password. Please check your credentials.");
+      } else if (errorMessage.toLowerCase().includes("too many")) {
         setFormError("Too many attempts. Please try again later.");
-        return;
+      } else {
+        setFormError(errorMessage);
       }
-
-      setFormError(err.message || "Failed to log in");
     }
   }
 
+  /**
+   * Handles the forgot password request.
+   */
   async function handleForgotPassword(e) {
     e.preventDefault();
     setResetError("");
     setResetSuccess(false);
     setResetLoading(true);
 
-    // Spam protection - rate limiting
+    // Rate limiting protection
     const now = Date.now();
     if (now - lastResetAttempt < RESET_COOLDOWN_TIME && resetAttempts >= RESET_ATTEMPT_LIMIT) {
-      const remainingTime = Math.ceil((RESET_COOLDOWN_TIME - (now - lastResetAttempt)) / 1000);
-      setResetError(`Too many attempts. Please wait ${remainingTime} seconds before trying again.`);
+      const remaining = Math.ceil((RESET_COOLDOWN_TIME - (now - lastResetAttempt)) / 1000);
+      setResetError(`Too many attempts. Please wait ${remaining} seconds.`);
       setResetLoading(false);
       return;
     }
 
-    // Validate email format
+    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(resetEmail)) {
       setResetError("Please enter a valid email address.");
@@ -138,48 +146,24 @@ export default function Login() {
       return;
     }
 
-    // Check for suspicious patterns (basic spam detection)
-    const suspiciousPatterns = [
-      /noreply/i,
-      /no-reply/i,
-      /donotreply/i,
-      /do-not-reply/i,
-      /test@test/i,
-      /spam/i
-    ];
-
-    if (suspiciousPatterns.some(pattern => pattern.test(resetEmail))) {
-      setResetError("This email address cannot be used for password reset.");
-      setResetLoading(false);
-      return;
-    }
-
     try {
-      // Update spam protection counters
       setLastResetAttempt(now);
       setResetAttempts(prev => prev + 1);
 
       await resetPassword(resetEmail);
+      
       setResetSuccess(true);
       setResetEmail("");
-      // Reset attempt counter on success
       setResetAttempts(0);
-      // Auto-close modal after 3 seconds
+      
+      // Close modal automatically after success
       setTimeout(() => {
         setShowForgotPassword(false);
         setResetSuccess(false);
       }, 3000);
+
     } catch (err) {
-      // Error is already handled by the hook with toast, but we can show inline error too
-      if (err.code === "auth/user-not-found") {
-        setResetError("No account found with this email address.");
-      } else if (err.code === "auth/invalid-email") {
-        setResetError("Invalid email address. Please enter a valid email.");
-      } else if (err.code === "auth/too-many-requests") {
-        setResetError("Too many requests. Please try again later.");
-      } else {
-        setResetError(err.message || "Failed to send password reset email. Please try again.");
-      }
+      setResetError(err.message || "Failed to send reset link.");
     } finally {
       setResetLoading(false);
     }

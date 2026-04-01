@@ -1,9 +1,8 @@
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import AddFormPopup from "./AddFormPopup.jsx";
+import { normalizeMongoId } from "../utils/mongoIds.js";
 
 export default function Sidebar({
   onSelectForm,
@@ -12,17 +11,19 @@ export default function Sidebar({
   clearNotificationsToken,
   onSelectAdminSection,
   activeAdminSection,
+  sidebarRefreshKey = 0,
 }) {
   const [showPopup, setShowPopup] = useState(false);
   const [forms, setForms] = useState([]);
   const [folders, setFolders] = useState([]);
+  const [listsRefresh, setListsRefresh] = useState(0);
   const [expandedFolders, setExpandedFolders] = useState({});
   const [newSubmissionCounts, setNewSubmissionCounts] = useState({});
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-  const { currentUser,userMeta} = useAuth();
+  const { currentUser, userMeta } = useAuth();
   const { addToast } = useToast();
-  const submissionUnsubsRef = useRef({});
-  const initializedSubmissionListenersRef = useRef({});
+  const latestByFormRef = useRef({});
+  const hasSeededLatestRef = useRef(false);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -34,129 +35,102 @@ export default function Sidebar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLogoutMenu]);
 
+  // --- MONGODB MIGRATION: Fetching Forms & Folders ---
   useEffect(() => {
     if (!currentUser) return;
 
-    let qRef = collection(db, "forms");
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const headers = { "Authorization": `Bearer ${token}` };
 
-    if (!userMeta || userMeta.role !== "super_admin") {
-      qRef = query(qRef, where("userId", "==", currentUser.uid));
-    }
+        const formsRes = await fetch("/api/forms", { headers });
+        if (formsRes.ok) {
+          const formsData = await formsRes.json();
 
-    const unsub = onSnapshot(qRef, (snap) => {
-      const arr = [];
-      snap.forEach((docSnap) => {
-        arr.push({
-          formId: docSnap.id,
-          ...docSnap.data(),
-        });
-      });
-      setForms(arr);
-    });
-    return () => unsub();
-  }, [currentUser, userMeta]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    let qRef = collection(db, "folders");
-
-    if (!userMeta || userMeta.role !== "super_admin") {
-      qRef = query(qRef, where("userId", "==", currentUser.uid));
-    }
-
-    const unsub = onSnapshot(qRef, (snap) => {
-      const arr = [];
-      snap.forEach((docSnap) => {
-        arr.push({
-          id: docSnap.id,
-          ...docSnap.data(),
-        });
-      });
-      setFolders(arr);
-    });
-    return () => unsub();
-  }, [currentUser, userMeta]);
-
-  const homeActive = !selectedForm;
-  const isSuperAdmin = userMeta?.role === "super_admin";
-
-  const formsByFolder = {};
-  
-  forms.forEach((form) => {
-    if (form.folderId) {
-      const folderExists = folders.some(folder => folder.id === form.folderId);
-      if (folderExists) {
-        if (!formsByFolder[form.folderId]) {
-          formsByFolder[form.folderId] = [];
+          setForms(formsData.map(f => ({ ...f, formId: f._id, id: f._id })));
         }
-        formsByFolder[form.folderId].push(form);
-      } else {
-        console.warn(`Form "${form.name}" has folderId "${form.folderId}" but folder not found`);
+        const foldersRes = await fetch("/api/folders", { headers });
+        if (foldersRes.ok) {
+          const foldersData = await foldersRes.json();
+
+          setFolders(foldersData.map(f => ({ ...f, id: f._id })));
+        }
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
       }
-    }
-  });
+    };
 
-  const formsWithoutFolder = forms.filter(form => !form.folderId);
+    fetchData();
+  }, [currentUser, listsRefresh, sidebarRefreshKey]);
 
+  // --- MongoDB: New submission notifications (polling) ---
   useEffect(() => {
-    const activeFormIds = new Set(forms.map((f) => f.formId));
+    if (!currentUser) return;
+    if (!forms || forms.length === 0) return;
 
-    Object.keys(submissionUnsubsRef.current).forEach((formId) => {
-      if (!activeFormIds.has(formId)) {
-        submissionUnsubsRef.current[formId]();
-        delete submissionUnsubsRef.current[formId];
-        delete initializedSubmissionListenersRef.current[formId];
-        setNewSubmissionCounts((prev) => {
-          const next = { ...prev };
-          delete next[formId];
-          return next;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const res = await fetch("/api/submissions/latest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ formIds: forms.map((f) => f.formId) }),
         });
-      }
-    });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return;
+        if (cancelled) return;
 
-    forms.forEach((form) => {
-      if (submissionUnsubsRef.current[form.formId]) return;
+        const latestMap = data.result || {};
 
-      const submissionsRef = collection(db, `forms/${form.formId}/submissions`);
-      const submissionsQuery = query(submissionsRef, orderBy("submittedAt", "desc"));
+        // Seed baseline once so we don't toast for existing submissions
+        if (!hasSeededLatestRef.current) {
+          Object.entries(latestMap).forEach(([formId, info]) => {
+            latestByFormRef.current[formId] = info?.latestCreatedAtMs || 0;
+          });
+          hasSeededLatestRef.current = true;
+          return;
+        }
 
-      submissionUnsubsRef.current[form.formId] = onSnapshot(
-        submissionsQuery,
-        (snap) => {
-          if (!initializedSubmissionListenersRef.current[form.formId]) {
-            initializedSubmissionListenersRef.current[form.formId] = true;
-            return;
-          }
+        Object.entries(latestMap).forEach(([formId, info]) => {
+          const latestMs = info?.latestCreatedAtMs || 0;
+          const prevMs = latestByFormRef.current[formId] || 0;
+          if (!latestMs || latestMs <= prevMs) return;
 
-          const addedCount = snap.docChanges().filter((change) => change.type === "added").length;
+          latestByFormRef.current[formId] = latestMs;
+          if (selectedForm?.formId === formId) return;
 
-          if (addedCount <= 0) return;
-          if (selectedForm?.formId === form.formId) return;
+          const formName = forms.find((f) => f.formId === formId)?.name || "Form";
 
           setNewSubmissionCounts((prev) => ({
             ...prev,
-            [form.formId]: (prev[form.formId] || 0) + addedCount,
+            [formId]: (prev[formId] || 0) + 1,
           }));
 
-          addToast(
-            `${addedCount} new submission${addedCount > 1 ? "s" : ""} in ${form.name}`,
-            "info"
-          );
-        },
-        (err) => {
-          console.warn(
-            `Sidebar submission listener blocked for form ${form.formId}:`,
-            err?.code || err
-          );
-        }
-      );
-    });
-  }, [forms, selectedForm?.formId, addToast]);
+          addToast(`1 new submission in ${formName}`, "info");
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 7000);
+    const onFocus = () => poll();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [currentUser, forms, selectedForm?.formId, addToast]);
+
   useEffect(() => {
     const activeFormId = selectedForm?.formId;
     if (!activeFormId) return;
-
     setNewSubmissionCounts((prev) => {
       if (!prev[activeFormId]) return prev;
       const next = { ...prev };
@@ -164,27 +138,41 @@ export default function Sidebar({
       return next;
     });
   }, [selectedForm?.formId]);
+
   useEffect(() => {
     setNewSubmissionCounts({});
   }, [clearNotificationsToken]);
 
   useEffect(() => {
     return () => {
-      Object.values(submissionUnsubsRef.current).forEach((unsub) => unsub());
-      submissionUnsubsRef.current = {};
-      initializedSubmissionListenersRef.current = {};
+      // no-op (mongo polling cleanup handled in effect)
     };
   }, []);
 
+  const homeActive = !selectedForm;
+  const isSuperAdmin = userMeta?.role === "super_admin";
+
+  // API populates folderId as { _id, name }; compare using normalized ids
+  const formsByFolder = {};
+  forms.forEach((form) => {
+    const fid = normalizeMongoId(form.folderId);
+    if (fid) {
+      const folderExists = folders.some((folder) => String(folder.id) === fid);
+      if (folderExists) {
+        if (!formsByFolder[fid]) formsByFolder[fid] = [];
+        formsByFolder[fid].push(form);
+      }
+    }
+  });
+
+  const formsWithoutFolder = forms.filter((form) => !normalizeMongoId(form.folderId));
+
   const LucideIcon = ({ name, className = "" }) => {
     useEffect(() => {
-      if (window.lucide) {
-        window.lucide.createIcons();
-      }
+      if (window.lucide) window.lucide.createIcons();
     }, [name]);
-    
     return (
-      <span 
+      <span
         className="d-inline-flex align-items-center justify-content-center"
         dangerouslySetInnerHTML={{ __html: `<i data-lucide="${name}" class="${className}" stroke-width="2"></i>` }}
       />
@@ -201,7 +189,7 @@ export default function Sidebar({
           <LucideIcon name="menu" className="icon-md" />
         </div>
       </div>
-      <div className="sidebar-body">
+      <div className="sidebar-body" style={{ overflowX: "hidden" }}>
         <ul className="nav" id="sidebarNav">
           {isSuperAdmin ? (
             <>
@@ -305,7 +293,7 @@ export default function Sidebar({
                           style={{
                             color: isSelected ? "var(--nobleui-primary)" : "#4d5969",
                             textDecoration: "none",
-                            paddingLeft: "45px",
+                            paddingLeft: "0.75rem",
                           }}
                         >
                           <span className="link-title text-truncate">{f.name}</span>
@@ -345,24 +333,25 @@ export default function Sidebar({
                     return (
                       <li key={folder.id} className="nav-item">
                         <button
-                          className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center justify-content-between"
+                          type="button"
+                          className="nav-link btn btn-link w-100 text-start border-0 d-flex align-items-center justify-content-between gap-1 flex-nowrap overflow-hidden"
                           onClick={() =>
                             setExpandedFolders((prev) => ({
                               ...prev,
                               [folder.id]: !isFolderExpanded,
                             }))
                           }
-                          style={{ color: "#4d5969", textDecoration: "none" }}
+                          style={{ color: "#4d5969", textDecoration: "none", minWidth: 0 }}
                         >
-                          <div className="d-flex align-items-center overflow-hidden">
+                          <div className="d-flex align-items-center overflow-hidden flex-grow-1 min-w-0">
                             <LucideIcon
                               name={isFolderExpanded ? "folder-open" : "folder"}
-                              className="link-icon"
+                              className="link-icon flex-shrink-0"
                             />
                             <span className="link-title text-truncate">{folder.name}</span>
                             {folderUnreadCount > 0 && (
                               <span
-                                className="badge rounded-pill bg-primary ms-2"
+                                className="badge rounded-pill bg-primary ms-2 flex-shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setNewSubmissionCounts({});
@@ -377,15 +366,12 @@ export default function Sidebar({
                             )}
                           </div>
                           <div
-                            className="link-arrow"
+                            className="link-arrow flex-shrink-0 d-inline-flex align-items-center justify-content-center"
                             style={{
+                              width: "1.25rem",
                               transform: isFolderExpanded ? "rotate(180deg)" : "rotate(0deg)",
                               transition: "transform 0.2s",
-                              visibility: folderForms.length >= 0 ? "visible" : "hidden",
-                              display: "inline-flex",
-                              opacity: 1,
                               color: "#4d5969",
-                              pointerEvents: "none",
                             }}
                           >
                             <LucideIcon name="chevron-down" />
@@ -416,9 +402,8 @@ export default function Sidebar({
                                   <li key={f.formId} className="nav-item">
                                     <button
                                       onClick={() => onSelectForm(f)}
-                                      className={`nav-link btn btn-link w-100 text-start border-0 py-1 fs-13px d-flex align-items-center justify-content-between ${
-                                        isSelected ? "text-primary fw-bold" : ""
-                                      }`}
+                                      className={`nav-link btn btn-link w-100 text-start border-0 py-1 fs-13px d-flex align-items-center justify-content-between ${isSelected ? "text-primary fw-bold" : ""
+                                        }`}
                                       style={{
                                         color: isSelected ? "var(--nobleui-primary)" : "#4d5969",
                                         textDecoration: "none",
@@ -457,7 +442,13 @@ export default function Sidebar({
         </ul>
       </div>
 
-      {showPopup && <AddFormPopup onClose={() => setShowPopup(false)} onSelectForm={onSelectForm} />}
+      {showPopup && (
+        <AddFormPopup
+          onClose={() => setShowPopup(false)}
+          onSelectForm={onSelectForm}
+          onCreated={() => setListsRefresh((n) => n + 1)}
+        />
+      )}
     </nav>
   );
 }

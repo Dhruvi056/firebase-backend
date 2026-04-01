@@ -35,7 +35,6 @@ export default function Home() {
   });
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [clearNotificationsToken, setClearNotificationsToken] = useState(0);
-  const [clearBeforeMs, setClearBeforeMs] = useState(0);
   const { currentUser, userMeta, logout, updateUserMeta } = useAuth();
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
@@ -46,12 +45,6 @@ export default function Home() {
   const clearBeforeMsRef = useRef(0);
   const latestByFormRef = useRef({});
   const hasSeededMongoNotificationsRef = useRef(false);
-
-  const getNotificationTimeMs = (value) => {
-    if (value?.toDate) return value.toDate().getTime();
-    const parsed = new Date(value || 0).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
 
   // --- MongoDB: Keep top-right bell notifications in sync with sidebar ---
   useEffect(() => {
@@ -201,7 +194,6 @@ export default function Home() {
   const clearAllNotifications = async () => {
     const now = Date.now();
     clearBeforeMsRef.current = now;
-    setClearBeforeMs(now);
 
     setNotifications([]);
     setUnreadCount(0);
